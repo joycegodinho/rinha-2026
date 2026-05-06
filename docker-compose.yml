@@ -1,0 +1,55 @@
+x-service-common: &service-common
+  image: joycegodinhoo/rinha-2026-api:v0.1.0
+  platform: linux/amd64
+  environment:
+    GC_MODE: off
+  volumes:
+    - sockets-volume:/sockets
+  networks:
+    - backend
+  mem_limit: 155m
+  cpus: "0.4"
+  ulimits:
+    nofile:
+      soft: 65535
+      hard: 65535
+
+services:
+  service-1:
+    <<: *service-common
+    environment:
+      GC_MODE: off
+      SOCKET_PATH: /sockets/service-1.sock
+
+  service-2:
+    <<: *service-common
+    environment:
+      GC_MODE: off
+      SOCKET_PATH: /sockets/service-2.sock
+
+  load-balancer:
+    image: haproxy:2.9-alpine
+    platform: linux/amd64
+    ports:
+      - "9999:9999"
+    depends_on:
+      - service-1
+      - service-2
+    volumes:
+      - ./load-balancer/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - sockets-volume:/sockets
+    networks:
+      - backend
+    mem_limit: 40m
+    cpus: "0.2"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  sockets-volume:
