@@ -1,0 +1,64 @@
+x-base-env: &base-env
+  GC_MODE: off
+
+services:
+  service: &service
+    build:
+      context: .
+      target: dev
+      dockerfile: service/Dockerfile
+    environment:
+      <<: *base-env
+      SERVICE_NUMBER: 1
+      SOCKET_PATH: /sockets/service-1.sock
+    volumes:
+      - ./:/pps/
+      - sockets-volume:/sockets
+    working_dir: /pps
+    networks:
+      - backend
+
+  service-2:
+    <<: *service
+    build:
+      context: .
+      target: dev
+      dockerfile: service/Dockerfile.2
+    environment:
+      <<: *base-env
+      SERVICE_NUMBER: 2
+      SOCKET_PATH: /sockets/service-2.sock
+    volumes:
+      - ./:/pps2/
+      - sockets-volume:/sockets
+    working_dir: /pps2/
+    networks:
+      - backend
+
+  load-balancer:
+    build:
+      context: .
+      target: dev
+      dockerfile: load-balancer/Dockerfile
+    ports:
+      - "9999:9999"
+    environment:
+      - PORT=9999
+      - GC_MODE=off
+      - SOCKET1_PATH=/sockets/service-1.sock
+      - SOCKET2_PATH=/sockets/service-2.sock
+    volumes:
+      - ./:/lbb/
+      - sockets-volume:/sockets
+    depends_on:
+      - service
+      - service-2
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  sockets-volume:
