@@ -55,7 +55,6 @@ services:
 
   warmup:
     image: curlimages/curl:8.8.0
-    profiles: ["warmup"]
     entrypoint: ["/bin/sh", "/warmup.sh"]
     environment:
       - BASE_URL=http://load-balancer:9999

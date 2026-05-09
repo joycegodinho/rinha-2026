@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 BASE_URL="${BASE_URL:-http://localhost:9999}"
 READY_URL="${BASE_URL}/ready"
@@ -13,19 +13,22 @@ payload_b='{"id":"warmup-b","transaction":{"amount":2911.41,"installments":12,"r
 
 echo "warming up stack via ${BASE_URL}"
 
-for ((i = 1; i <= READY_RETRIES; i++)); do
+i=1
+while [ "${i}" -le "${READY_RETRIES}" ]; do
   if curl -fsS --max-time 1 "${READY_URL}" >/dev/null; then
     break
   fi
-  if [[ "${i}" -eq "${READY_RETRIES}" ]]; then
+  if [ "${i}" -eq "${READY_RETRIES}" ]; then
     echo "ready check failed after ${READY_RETRIES} attempts" >&2
     exit 1
   fi
   sleep "${READY_SLEEP}"
+  i=$((i + 1))
 done
 
-for ((i = 1; i <= WARMUP_ROUNDS; i++)); do
-  if (( i % 2 == 0 )); then
+i=1
+while [ "${i}" -le "${WARMUP_ROUNDS}" ]; do
+  if [ $((i % 2)) -eq 0 ]; then
     body="${payload_a}"
   else
     body="${payload_b}"
@@ -35,6 +38,7 @@ for ((i = 1; i <= WARMUP_ROUNDS; i++)); do
     -H 'content-type: application/json' \
     -d "${body}" \
     "${SCORE_URL}" >/dev/null
+  i=$((i + 1))
 done
 
 echo "warmup complete"
