@@ -1,5 +1,5 @@
 x-service-common: &service-common
-  image: joycegodinhoo/rinha-2026-api:v0.1.0
+  image: joycegodinhoo/rinha-2026-api:v0.1.1
   platform: linux/amd64
   environment:
     GC_MODE: off
@@ -7,8 +7,11 @@ x-service-common: &service-common
     - sockets-volume:/sockets
   networks:
     - backend
-  mem_limit: 155m
-  cpus: "0.4"
+  deploy:
+    resources:
+      limits:
+        cpus: "0.3"
+        memory: "149M"
   ulimits:
     nofile:
       soft: 65535
@@ -40,12 +43,37 @@ services:
       - sockets-volume:/sockets
     networks:
       - backend
-    mem_limit: 40m
-    cpus: "0.2"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.36"
+          memory: "40M"
     ulimits:
       nofile:
         soft: 65535
         hard: 65535
+
+  warmup:
+    image: curlimages/curl:8.8.0
+    platform: linux/amd64
+    entrypoint: ["/bin/sh", "/warmup.sh"]
+    environment:
+      - BASE_URL=http://load-balancer:9999
+      - READY_RETRIES=240
+      - READY_SLEEP=0.25
+      - WARMUP_ROUNDS=48
+    volumes:
+      - ./scripts/warmup.sh:/warmup.sh:ro
+    depends_on:
+      - load-balancer
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.04"
+          memory: "12M"
+    restart: "no"
 
 networks:
   backend:
