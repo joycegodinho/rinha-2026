@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"service/database/ivf"
+	"time"
 )
 
 type RuntimeData struct {
@@ -106,6 +108,11 @@ func Init() *RuntimeData {
 	)
 
 	rt.DB = db
+	if os.Getenv("DB_WARMUP") != "off" {
+		start := time.Now()
+		rt.DB.Warmup()
+		log.Printf("IVF warmup finished in %s", time.Since(start))
+	}
 
 	if err := loadNorm("service/normalization.json", rt); err != nil {
 		panic(err)

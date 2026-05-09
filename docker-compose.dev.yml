@@ -36,10 +36,7 @@ services:
       - backend
 
   load-balancer:
-    build:
-      context: .
-      target: dev
-      dockerfile: load-balancer/Dockerfile
+    image: haproxy:2.9-alpine
     ports:
       - "9999:9999"
     environment:
@@ -48,11 +45,27 @@ services:
       - SOCKET1_PATH=/sockets/service-1.sock
       - SOCKET2_PATH=/sockets/service-2.sock
     volumes:
-      - ./:/lbb/
+      - ./load-balancer/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - sockets-volume:/sockets
     depends_on:
       - service
       - service-2
+    networks:
+      - backend
+
+  warmup:
+    image: curlimages/curl:8.8.0
+    profiles: ["warmup"]
+    entrypoint: ["/bin/sh", "/warmup.sh"]
+    environment:
+      - BASE_URL=http://load-balancer:9999
+      - READY_RETRIES=240
+      - READY_SLEEP=0.25
+      - WARMUP_ROUNDS=48
+    volumes:
+      - ./scripts/warmup.sh:/warmup.sh:ro
+    depends_on:
+      - load-balancer
     networks:
       - backend
 
