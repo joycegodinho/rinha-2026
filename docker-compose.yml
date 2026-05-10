@@ -1,5 +1,5 @@
 x-service-common: &service-common
-  image: joycegodinhoo/rinha-2026-api:v0.1.5
+  image: joycegodinhoo/rinha-2026-api:v0.1.6
   platform: linux/amd64
   environment:
     GC_MODE: off
