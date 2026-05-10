@@ -10,7 +10,7 @@ x-service-common: &service-common
   deploy:
     resources:
       limits:
-        cpus: "0.31"
+        cpus: "0.3"
         memory: "149M"
   ulimits:
     nofile:
@@ -36,10 +36,8 @@ services:
     ports:
       - "9999:9999"
     depends_on:
-      service-1:
-        condition: service_started
-      service-2:
-        condition: service_started
+      - service-1
+      - service-2
     volumes:
       - ./load-balancer/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - sockets-volume:/sockets
@@ -48,7 +46,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.32"
+          cpus: "0.36"
           memory: "40M"
     ulimits:
       nofile:
@@ -62,19 +60,18 @@ services:
     environment:
       - BASE_URL=http://load-balancer:9999
       - READY_RETRIES=240
-      - READY_SLEEP=0.2
+      - READY_SLEEP=0.25
       - WARMUP_ROUNDS=48
     volumes:
       - ./scripts/warmup.sh:/warmup.sh:ro
     depends_on:
-      load-balancer:
-        condition: service_started
+      - load-balancer
     networks:
       - backend
     deploy:
       resources:
         limits:
-          cpus: "0.06"
+          cpus: "0.04"
           memory: "12M"
     restart: "no"
 
