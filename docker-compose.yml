@@ -1,10 +1,12 @@
 x-service-common: &service-common
-  image: joycegodinhoo/rinha-2026-api:v0.1.7
+  image: joycegodinhoo/rinha-2026-api:v0.1.7-test-4
   platform: linux/amd64
   environment:
     GC_MODE: off
     GOGC: "500"
     GOMEMLIMIT: "60MiB"
+    SERVICE_MODE: raw
+    # SERVICE_MODE: ${SERVICE_MODE:-}
   volumes:
     - sockets-volume:/sockets
   networks:
@@ -26,6 +28,7 @@ services:
       GC_MODE: off
       GOGC: "500"
       GOMEMLIMIT: "60MiB"
+      SERVICE_MODE: raw
       SOCKET_PATH: /sockets/service-1.sock
 
   service-2:
@@ -34,6 +37,7 @@ services:
       GC_MODE: off
       GOGC: "500"
       GOMEMLIMIT: "60MiB"
+      SERVICE_MODE: raw
       SOCKET_PATH: /sockets/service-2.sock
 
   load-balancer:
@@ -67,7 +71,7 @@ services:
       - BASE_URL=http://load-balancer:9999
       - READY_RETRIES=240
       - READY_SLEEP=0.25
-      - WARMUP_ROUNDS=120
+      - WARMUP_ROUNDS=48
     volumes:
       - ./scripts/warmup.sh:/warmup.sh:ro
     depends_on:
