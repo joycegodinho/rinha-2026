@@ -57,6 +57,8 @@ type PruneCounts struct {
 type SearchTrace struct {
 	Path           int
 	Frauds         int
+	QuickFrauds    int
+	RescoreFrauds  int
 	QuickBlocks    int
 	ExpandedBlocks int
 	RescoreBlocks  int

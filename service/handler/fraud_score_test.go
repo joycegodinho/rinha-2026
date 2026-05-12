@@ -366,6 +366,179 @@ func TestFraudScorePruneStageStats(t *testing.T) {
 	}
 }
 
+func TestFraudScoreAdaptiveProbeCandidates(t *testing.T) {
+	path := os.Getenv("TEST_DATA_PATH")
+	if path == "" {
+		t.Skip("set TEST_DATA_PATH to run adaptive probe stats")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var fixture struct {
+		Entries []struct {
+			Request          json.RawMessage `json:"request"`
+			ExpectedApproved bool            `json:"expected_approved"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	chdirRepoRoot(t)
+
+	rt := runtime.Init()
+	var ws16, ws20 ivf.SearchWorkspace
+	for idx, entry := range fixture.Entries {
+		var q ivf.Vector
+		buildVectorUltra(entry.Request, rt, &q)
+		trace16 := rt.DB.FraudCount5TraceDetailed(&q, &ws16, 8, 16)
+		trace20 := rt.DB.FraudCount5TraceDetailed(&q, &ws20, 8, 20)
+		ok16 := trace16.Frauds < 3
+		ok20 := trace20.Frauds < 3
+		if ok16 == entry.ExpectedApproved {
+			continue
+		}
+		t.Logf(
+			"wrong16 index=%d expected=%v got16=%v got20=%v quickFrauds16=%d rescoreFrauds16=%d quickBlocks=%d rescoreBlocks16=%d rescoreBlocks20=%d body=%s",
+			idx,
+			entry.ExpectedApproved,
+			ok16,
+			ok20,
+			trace16.QuickFrauds,
+			trace16.RescoreFrauds,
+			trace16.QuickBlocks,
+			trace16.RescoreBlocks,
+			trace20.RescoreBlocks,
+			string(entry.Request),
+		)
+	}
+}
+
+func TestFraudScoreAdaptiveRescoreDistribution(t *testing.T) {
+	path := os.Getenv("TEST_DATA_PATH")
+	if path == "" {
+		t.Skip("set TEST_DATA_PATH to run adaptive rescore distribution")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var fixture struct {
+		Entries []struct {
+			Request          json.RawMessage `json:"request"`
+			ExpectedApproved bool            `json:"expected_approved"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	chdirRepoRoot(t)
+
+	rt := runtime.Init()
+	var wsQuick, ws16, ws20 ivf.SearchWorkspace
+	var bins [6]int
+	var quickBins [6]int
+	var rescored, rerunNeeded, adaptiveWrong int
+	var quick2AdaptiveWrong, quick3AdaptiveWrong int
+	var directQuick2Wrong, directQuick3Wrong int
+	var rescoreBlocks16, extraBlocks20 int
+	var quick2AdaptiveBlocks, quick3AdaptiveBlocks int
+	var directQuick2Blocks, directQuick3Blocks int
+	for _, entry := range fixture.Entries {
+		var q ivf.Vector
+		buildVectorUltra(entry.Request, rt, &q)
+
+		quickFrauds, pathQuick := rt.DB.FraudCount5TraceProbes(&q, &wsQuick, 8, 8)
+		if pathQuick != 2 {
+			continue
+		}
+		rescored++
+		if quickFrauds >= 0 && quickFrauds <= 5 {
+			quickBins[quickFrauds]++
+		}
+
+		f16, _ := rt.DB.FraudCount5TraceProbes(&q, &ws16, 8, 16)
+		if f16 >= 0 && f16 <= 5 {
+			bins[f16]++
+		}
+		trace16 := rt.DB.FraudCount5TraceDetailed(&q, &ws16, 8, 16)
+		trace20 := rt.DB.FraudCount5TraceDetailed(&q, &ws20, 8, 20)
+		rescoreBlocks16 += trace16.RescoreBlocks
+		finalFrauds := f16
+		if f16 == 2 || f16 == 3 {
+			rerunNeeded++
+			extraBlocks20 += trace20.RescoreBlocks
+			finalFrauds = trace20.Frauds
+		}
+		if (finalFrauds < 3) != entry.ExpectedApproved {
+			adaptiveWrong++
+		}
+
+		fQuick2 := f16
+		quick2AdaptiveBlocks += trace16.RescoreBlocks
+		if quickFrauds == 2 {
+			fQuick2 = trace20.Frauds
+			quick2AdaptiveBlocks += trace20.RescoreBlocks
+		}
+		if (fQuick2 < 3) != entry.ExpectedApproved {
+			quick2AdaptiveWrong++
+		}
+
+		fQuick3 := f16
+		quick3AdaptiveBlocks += trace16.RescoreBlocks
+		if quickFrauds == 3 {
+			fQuick3 = trace20.Frauds
+			quick3AdaptiveBlocks += trace20.RescoreBlocks
+		}
+		if (fQuick3 < 3) != entry.ExpectedApproved {
+			quick3AdaptiveWrong++
+		}
+
+		fDirectQuick2 := trace16.Frauds
+		directQuick2Blocks += trace16.RescoreBlocks
+		if quickFrauds == 2 {
+			fDirectQuick2 = trace20.Frauds
+			directQuick2Blocks += trace20.RescoreBlocks - trace16.RescoreBlocks
+		}
+		if (fDirectQuick2 < 3) != entry.ExpectedApproved {
+			directQuick2Wrong++
+		}
+
+		fDirectQuick3 := trace16.Frauds
+		directQuick3Blocks += trace16.RescoreBlocks
+		if quickFrauds == 3 {
+			fDirectQuick3 = trace20.Frauds
+			directQuick3Blocks += trace20.RescoreBlocks - trace16.RescoreBlocks
+		}
+		if (fDirectQuick3 < 3) != entry.ExpectedApproved {
+			directQuick3Wrong++
+		}
+	}
+
+	t.Logf(
+		"rescored=%d quickBins=%v bins16=%v rerunNeeded=%d adaptiveWrong=%d rescoreBlocks16=%d extraBlocks20=%d quick2AdaptiveWrong=%d quick2AdaptiveBlocks=%d quick3AdaptiveWrong=%d quick3AdaptiveBlocks=%d directQuick2Wrong=%d directQuick2Blocks=%d directQuick3Wrong=%d directQuick3Blocks=%d",
+		rescored,
+		quickBins,
+		bins,
+		rerunNeeded,
+		adaptiveWrong,
+		rescoreBlocks16,
+		extraBlocks20,
+		quick2AdaptiveWrong,
+		quick2AdaptiveBlocks,
+		quick3AdaptiveWrong,
+		quick3AdaptiveBlocks,
+		directQuick2Wrong,
+		directQuick2Blocks,
+		directQuick3Wrong,
+		directQuick3Blocks,
+	)
+}
+
 var tailPruneNames = [6]string{
 	"tx_count_24h",
 	"is_online",
@@ -373,6 +546,103 @@ var tailPruneNames = [6]string{
 	"unknown_merchant",
 	"mcc_risk",
 	"merchant_avg",
+}
+
+func TestFraudScoreAdaptiveQuickByCentroidGap(t *testing.T) {
+	path := os.Getenv("TEST_DATA_PATH")
+	if path == "" {
+		t.Skip("set TEST_DATA_PATH to run adaptive quick gap stats")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var fixture struct {
+		Entries []struct {
+			Request          json.RawMessage `json:"request"`
+			ExpectedApproved bool            `json:"expected_approved"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	chdirRepoRoot(t)
+
+	rt := runtime.Init()
+	var ws6, ws8 ivf.SearchWorkspace
+
+	type sample struct {
+		gap   float32
+		ratio float32
+		base  ivf.SearchTrace
+		alt   ivf.SearchTrace
+		want  bool
+	}
+
+	samples := make([]sample, 0, len(fixture.Entries))
+	var baseWrong, baseBlocks, altWrong, altBlocks int
+	for _, entry := range fixture.Entries {
+		var q ivf.Vector
+		buildVectorUltra(entry.Request, rt, &q)
+
+		trace8 := rt.DB.FraudCount5TraceDetailed(&q, &ws8, 8, 20)
+		trace6 := rt.DB.FraudCount5TraceDetailed(&q, &ws6, 6, 20)
+		baseApproved := trace8.Frauds < 3
+		altApproved := trace6.Frauds < 3
+		if baseApproved != entry.ExpectedApproved {
+			baseWrong++
+		}
+		if altApproved != entry.ExpectedApproved {
+			altWrong++
+		}
+		baseBlocks += trace8.QuickBlocks + trace8.RescoreBlocks
+		altBlocks += trace6.QuickBlocks + trace6.RescoreBlocks
+
+		d6 := ws8.CentroidDists[ws8.Probes[5]]
+		d7 := ws8.CentroidDists[ws8.Probes[6]]
+		gap := d7 - d6
+		ratio := float32(9999)
+		if d6 > 1e-9 {
+			ratio = d7 / d6
+		}
+		samples = append(samples, sample{gap: gap, ratio: ratio, base: trace8, alt: trace6, want: entry.ExpectedApproved})
+	}
+
+	t.Logf("baseline quick8 wrong=%d blocks=%d | quick6 wrong=%d blocks=%d", baseWrong, baseBlocks, altWrong, altBlocks)
+
+	for _, th := range []float32{0.0005, 0.0010, 0.0020, 0.0030, 0.0050, 0.0075, 0.0100, 0.0150, 0.0200} {
+		var wrong, use6, totalBlocks int
+		for _, s := range samples {
+			chosen := s.base
+			if s.gap >= th {
+				chosen = s.alt
+				use6++
+			}
+			if (chosen.Frauds < 3) != s.want {
+				wrong++
+			}
+			totalBlocks += chosen.QuickBlocks + chosen.RescoreBlocks
+		}
+		t.Logf("gap threshold=%.4f wrong=%d use6=%d blocks=%d saved=%d", th, wrong, use6, totalBlocks, baseBlocks-totalBlocks)
+	}
+
+	for _, th := range []float32{1.005, 1.010, 1.020, 1.030, 1.050, 1.080, 1.100, 1.150, 1.200} {
+		var wrong, use6, totalBlocks int
+		for _, s := range samples {
+			chosen := s.base
+			if s.ratio >= th {
+				chosen = s.alt
+				use6++
+			}
+			if (chosen.Frauds < 3) != s.want {
+				wrong++
+			}
+			totalBlocks += chosen.QuickBlocks + chosen.RescoreBlocks
+		}
+		t.Logf("ratio threshold=%.3f wrong=%d use6=%d blocks=%d saved=%d", th, wrong, use6, totalBlocks, baseBlocks-totalBlocks)
+	}
 }
 
 func formatTailPruned(counts [6]int) string {

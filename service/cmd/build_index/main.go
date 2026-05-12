@@ -247,32 +247,32 @@ func writeIndex(path string, vectors [][dim]float32, labels []byte, assignments 
 	offsets := make([]uint32, k+1)
 	for ci := 0; ci < k; ci++ {
 		sz := uint32(len(clusters[ci]))
-		offsets[ci+1] = offsets[ci] + (sz+7)/8
+		offsets[ci+1] = offsets[ci] + (sz+15)/16
 	}
 
 	totalBlocks := int(offsets[k])
-	paddedN := totalBlocks * 8
+	paddedN := totalBlocks * 16
 	outLabels := make([]byte, paddedN)
-	outBlocks := make([]int16, totalBlocks*dim*8)
+	outBlocks := make([]int16, totalBlocks*dim*16)
 
 	for ci := 0; ci < k; ci++ {
 		blockStart := int(offsets[ci])
 		vecs := clusters[ci]
 		nBlocks := int(offsets[ci+1] - offsets[ci])
 		for bk := 0; bk < nBlocks; bk++ {
-			blockBase := (blockStart + bk) * dim * 8
-			labelBase := (blockStart + bk) * 8
-			for slot := 0; slot < 8; slot++ {
-				pos := bk*8 + slot
+			blockBase := (blockStart + bk) * dim * 16
+			labelBase := (blockStart + bk) * 16
+			for slot := 0; slot < 16; slot++ {
+				pos := bk*16 + slot
 				if pos < len(vecs) {
 					vi := int(vecs[pos])
 					for d := 0; d < dim; d++ {
-						outBlocks[blockBase+d*8+slot] = quantize(vectors[vi][d])
+						outBlocks[blockBase+d*16+slot] = quantize(vectors[vi][d])
 					}
 					outLabels[labelBase+slot] = labels[vi]
 				} else {
 					for d := 0; d < dim; d++ {
-						outBlocks[blockBase+d*8+slot] = math.MaxInt16
+						outBlocks[blockBase+d*16+slot] = math.MaxInt16
 					}
 				}
 			}

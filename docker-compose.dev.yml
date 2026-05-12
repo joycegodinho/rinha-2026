@@ -1,5 +1,7 @@
 x-base-env: &base-env
   GC_MODE: off
+  GOGC: ${GOGC:-500}
+  GOMEMLIMIT: ${GOMEMLIMIT:-60MiB}
 
 services:
   service: &service
@@ -11,6 +13,9 @@ services:
       <<: *base-env
       SERVICE_NUMBER: 1
       SOCKET_PATH: /sockets/service-1.sock
+      PPROF_ADDR: :6060
+    ports:
+      - "6060:6060"
     volumes:
       - ./:/pps/
       - sockets-volume:/sockets
@@ -28,6 +33,9 @@ services:
       <<: *base-env
       SERVICE_NUMBER: 2
       SOCKET_PATH: /sockets/service-2.sock
+      PPROF_ADDR: :6061
+    ports:
+      - "6061:6061"
     volumes:
       - ./:/pps2/
       - sockets-volume:/sockets
@@ -74,3 +82,8 @@ networks:
 
 volumes:
   sockets-volume:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=4m,mode=0777
