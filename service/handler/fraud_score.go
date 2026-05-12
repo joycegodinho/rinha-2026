@@ -3,7 +3,6 @@ package handler
 import (
 	"service/database/ivf"
 	"service/runtime"
-	"sync"
 
 	"github.com/valyala/fasthttp"
 )
@@ -511,41 +510,15 @@ func buildVectorUltra(body []byte, r *runtime.RuntimeData, out *ivf.Vector) {
 	out[13] = clamp(merchantAvg / n.MaxMerchantAvgAmount)
 }
 
-var fraudResponses = [6][]byte{
-	[]byte(`{"approved":true,"fraud_score":0.0}`),
-	[]byte(`{"approved":true,"fraud_score":0.2}`),
-	[]byte(`{"approved":true,"fraud_score":0.4}`),
-	[]byte(`{"approved":false,"fraud_score":0.6}`),
-	[]byte(`{"approved":false,"fraud_score":0.8}`),
-	[]byte(`{"approved":false,"fraud_score":1.0}`),
-}
-
-type requestState struct {
-	q  ivf.Vector
-	ws ivf.SearchWorkspace
-}
-
 func writeFraudCountResponse(ctx *fasthttp.RequestCtx, fraudCount int) {
-	if fraudCount < 0 {
-		fraudCount = 0
-	} else if fraudCount > 5 {
-		fraudCount = 5
-	}
-	ctx.Response.SetBodyRaw(fraudResponses[fraudCount])
+	ctx.Response.SetBodyRaw(FraudResponse(fraudCount))
 }
 
 func Handler(rt *runtime.RuntimeData) fasthttp.RequestHandler {
-	pool := sync.Pool{
-		New: func() any {
-			return new(requestState)
-		},
-	}
+	classifier := NewClassifier(rt)
 
 	return func(ctx *fasthttp.RequestCtx) {
-		state := pool.Get().(*requestState)
-		buildVectorUltra(ctx.Request.Body(), rt, &state.q)
-		fraudCount := rt.DB.FraudCount5WithWorkspace(&state.q, &state.ws)
-		pool.Put(state)
+		fraudCount := classifier.FraudCount(ctx.Request.Body())
 		writeFraudCountResponse(ctx, fraudCount)
 	}
 }

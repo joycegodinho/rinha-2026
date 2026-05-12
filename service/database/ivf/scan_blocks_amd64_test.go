@@ -145,6 +145,28 @@ func BenchmarkFraudCount5WithWorkspace(b *testing.B) {
 	}
 }
 
+func BenchmarkFraudCount5QuickProbes(b *testing.B) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		b.Fatal(err)
+	}
+	q := Vector{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134}
+
+	for _, quick := range []int{4, 5, 6, 8} {
+		b.Run(
+			"quick_"+string(rune('0'+quick)),
+			func(b *testing.B) {
+				var ws SearchWorkspace
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					_, _ = db.FraudCount5TraceProbes(&q, &ws, quick, 20)
+				}
+			},
+		)
+	}
+}
+
 func benchmarkIndexPath() string {
 	if path := os.Getenv("IVF_INDEX_PATH"); path != "" {
 		return path

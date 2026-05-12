@@ -86,6 +86,11 @@ func main() {
 	if socketPath == "" {
 		log.Fatal("SOCKET_PATH environment variable not set")
 	}
+	if os.Getenv("SERVICE_MODE") == "raw" {
+		serveRawUnix(rt, socketPath)
+		return
+	}
+
 	_ = os.Remove(socketPath)
 
 	ln, err := net.Listen("unix", socketPath)

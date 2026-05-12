@@ -229,6 +229,64 @@ func TestFraudScoreProbeStats(t *testing.T) {
 	}
 }
 
+func TestFraudScoreQuickProbeFocused(t *testing.T) {
+	path := os.Getenv("TEST_DATA_PATH")
+	if path == "" {
+		t.Skip("set TEST_DATA_PATH to run focused quick probe stats")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var fixture struct {
+		Entries []struct {
+			Request          json.RawMessage `json:"request"`
+			ExpectedApproved bool            `json:"expected_approved"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	chdirRepoRoot(t)
+
+	rt := runtime.Init()
+	for _, quick := range []int{4, 5, 6, 8} {
+		var wrong, quickOnly, rescore int
+		var quickBlocks, rescoreBlocks int
+		var ws ivf.SearchWorkspace
+
+		for _, entry := range fixture.Entries {
+			var q ivf.Vector
+			buildVectorUltra(entry.Request, rt, &q)
+			trace := rt.DB.FraudCount5TraceDetailed(&q, &ws, quick, 20)
+			if (trace.Frauds < 3) != entry.ExpectedApproved {
+				wrong++
+			}
+			quickBlocks += trace.QuickBlocks
+			rescoreBlocks += trace.RescoreBlocks
+			switch trace.Path {
+			case 0:
+				quickOnly++
+			case 2:
+				rescore++
+			}
+		}
+
+		t.Logf(
+			"focused quick=%d expanded=20 wrong=%d quick_only=%d rescore=%d quick_blocks=%d rescore_blocks=%d total_blocks=%d",
+			quick,
+			wrong,
+			quickOnly,
+			rescore,
+			quickBlocks,
+			rescoreBlocks,
+			quickBlocks+rescoreBlocks,
+		)
+	}
+}
+
 func TestFraudScorePruneStageStats(t *testing.T) {
 	path := os.Getenv("TEST_DATA_PATH")
 	if path == "" {
@@ -801,5 +859,17 @@ func BenchmarkBuildAndClassifyPooledState(b *testing.B) {
 		buildVectorUltra(benchmarkRequestBody, rt, &state.q)
 		_ = rt.DB.FraudCount5WithWorkspace(&state.q, &state.ws)
 		pool.Put(state)
+	}
+}
+
+func BenchmarkClassifierFraudCount(b *testing.B) {
+	chdirRepoRootB(b)
+	rt := runtime.Init()
+	classifier := NewClassifier(rt)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = classifier.FraudCount(benchmarkRequestBody)
 	}
 }

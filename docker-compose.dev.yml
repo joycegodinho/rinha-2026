@@ -2,6 +2,7 @@ x-base-env: &base-env
   GC_MODE: off
   GOGC: ${GOGC:-500}
   GOMEMLIMIT: ${GOMEMLIMIT:-60MiB}
+  SERVICE_MODE: ${SERVICE_MODE:-}
 
 services:
   service: &service
