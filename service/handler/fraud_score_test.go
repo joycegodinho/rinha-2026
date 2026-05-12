@@ -645,6 +645,98 @@ func TestFraudScoreAdaptiveQuickByCentroidGap(t *testing.T) {
 	}
 }
 
+func TestFraudScoreAdaptiveQuickMultiLevel(t *testing.T) {
+	path := os.Getenv("TEST_DATA_PATH")
+	if path == "" {
+		t.Skip("set TEST_DATA_PATH to run adaptive quick multi-level stats")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var fixture struct {
+		Entries []struct {
+			Request          json.RawMessage `json:"request"`
+			ExpectedApproved bool            `json:"expected_approved"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	chdirRepoRoot(t)
+
+	rt := runtime.Init()
+	var ws4, ws6, ws8 ivf.SearchWorkspace
+
+	type sample struct {
+		r45  float32
+		r67  float32
+		t4   ivf.SearchTrace
+		t6   ivf.SearchTrace
+		t8   ivf.SearchTrace
+		want bool
+	}
+
+	samples := make([]sample, 0, len(fixture.Entries))
+	var baseBlocks, wrong4, wrong6, wrong8 int
+	for _, entry := range fixture.Entries {
+		var q ivf.Vector
+		buildVectorUltra(entry.Request, rt, &q)
+
+		trace8 := rt.DB.FraudCount5TraceDetailed(&q, &ws8, 8, 20)
+		trace6 := rt.DB.FraudCount5TraceDetailed(&q, &ws6, 6, 20)
+		trace4 := rt.DB.FraudCount5TraceDetailed(&q, &ws4, 4, 20)
+		if (trace8.Frauds < 3) != entry.ExpectedApproved {
+			wrong8++
+		}
+		if (trace6.Frauds < 3) != entry.ExpectedApproved {
+			wrong6++
+		}
+		if (trace4.Frauds < 3) != entry.ExpectedApproved {
+			wrong4++
+		}
+		baseBlocks += trace8.QuickBlocks + trace8.RescoreBlocks
+
+		d4 := ws8.CentroidDists[ws8.Probes[3]]
+		d5 := ws8.CentroidDists[ws8.Probes[4]]
+		d6 := ws8.CentroidDists[ws8.Probes[5]]
+		d7 := ws8.CentroidDists[ws8.Probes[6]]
+		r45 := float32(9999)
+		r67 := float32(9999)
+		if d4 > 1e-9 {
+			r45 = d5 / d4
+		}
+		if d6 > 1e-9 {
+			r67 = d7 / d6
+		}
+		samples = append(samples, sample{r45: r45, r67: r67, t4: trace4, t6: trace6, t8: trace8, want: entry.ExpectedApproved})
+	}
+
+	t.Logf("baseline wrong: quick4=%d quick6=%d quick8=%d blocks8=%d", wrong4, wrong6, wrong8, baseBlocks)
+
+	for _, th4 := range []float32{1.01, 1.02, 1.03, 1.05, 1.08, 1.10, 1.15, 1.20, 1.30} {
+		var wrong, use4, use6, totalBlocks int
+		for _, s := range samples {
+			chosen := s.t8
+			switch {
+			case s.r45 >= th4:
+				chosen = s.t4
+				use4++
+			case s.r67 >= 1.01:
+				chosen = s.t6
+				use6++
+			}
+			if (chosen.Frauds < 3) != s.want {
+				wrong++
+			}
+			totalBlocks += chosen.QuickBlocks + chosen.RescoreBlocks
+		}
+		t.Logf("multi threshold4=%.3f wrong=%d use4=%d use6=%d blocks=%d saved=%d", th4, wrong, use4, use6, totalBlocks, baseBlocks-totalBlocks)
+	}
+}
+
 func formatTailPruned(counts [6]int) string {
 	out := ""
 	for i, name := range tailPruneNames {

@@ -4,15 +4,11 @@ import (
 	"encoding/json"
 	"log"
 	"net"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	goruntime "runtime"
 	"runtime/debug"
 	"service/handler"
 	appruntime "service/runtime"
-	"strconv"
-	"strings"
 
 	"time"
 
@@ -80,9 +76,8 @@ func checkFraudRate(path string) {
 func main() {
 	// checkFraudRate("service/references.json")
 	goruntime.GOMAXPROCS(1)
-	applyMemoryLimit()
+	debug.SetMemoryLimit(120 << 20)
 	log.Print("Start main")
-	// startPprofServer()
 	rt := appruntime.Init()
 	debug.FreeOSMemory()
 	tuneGCForHotPath()
@@ -144,47 +139,8 @@ func main() {
 	log.Println("Exiting...")
 }
 
-func applyMemoryLimit() {
-	if limit, ok := parseMemoryLimitEnv(os.Getenv("GOMEMLIMIT")); ok {
-		debug.SetMemoryLimit(limit)
-		log.Printf("[GC] Memory limit set from GOMEMLIMIT=%s (%d bytes)", os.Getenv("GOMEMLIMIT"), limit)
-		return
-	}
-	debug.SetMemoryLimit(120 << 20)
-	log.Printf("[GC] Memory limit set to default %d bytes", 120<<20)
-}
-
-func startPprofServer() {
-	addr := os.Getenv("PPROF_ADDR")
-	if addr == "" {
-		return
-	}
-	go func() {
-		log.Printf("[pprof] listening on %s", addr)
-		if err := http.ListenAndServe(addr, nil); err != nil {
-			log.Printf("[pprof] stopped: %v", err)
-		}
-	}()
-}
-
 func tuneGCForHotPath() {
-	if raw := strings.TrimSpace(os.Getenv("GOGC")); raw != "" {
-		switch strings.ToLower(raw) {
-		case "off":
-			debug.SetGCPercent(-1)
-			log.Println("[GC] Disabled after startup via GOGC=off")
-			return
-		default:
-			if v, err := strconv.Atoi(raw); err == nil {
-				debug.SetGCPercent(v)
-				log.Printf("[GC] Set GC percent to %d via GOGC", v)
-				return
-			}
-			log.Printf("[GC] Ignoring invalid GOGC=%q", raw)
-		}
-	}
-
-	switch strings.ToLower(os.Getenv("GC_MODE")) {
+	switch os.Getenv("GC_MODE") {
 	case "off":
 		debug.SetGCPercent(-1)
 		log.Println("[GC] Disabled after startup")
@@ -192,42 +148,4 @@ func tuneGCForHotPath() {
 		debug.SetGCPercent(1000)
 		log.Println("[GC] High threshold mode after startup")
 	}
-}
-
-func parseMemoryLimitEnv(raw string) (int64, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return 0, false
-	}
-
-	lower := strings.ToLower(raw)
-	mult := int64(1)
-	switch {
-	case strings.HasSuffix(lower, "mib"):
-		mult = 1 << 20
-		lower = strings.TrimSpace(strings.TrimSuffix(lower, "mib"))
-	case strings.HasSuffix(lower, "mb"):
-		mult = 1000 * 1000
-		lower = strings.TrimSpace(strings.TrimSuffix(lower, "mb"))
-	case strings.HasSuffix(lower, "kib"):
-		mult = 1 << 10
-		lower = strings.TrimSpace(strings.TrimSuffix(lower, "kib"))
-	case strings.HasSuffix(lower, "kb"):
-		mult = 1000
-		lower = strings.TrimSpace(strings.TrimSuffix(lower, "kb"))
-	case strings.HasSuffix(lower, "gib"):
-		mult = 1 << 30
-		lower = strings.TrimSpace(strings.TrimSuffix(lower, "gib"))
-	case strings.HasSuffix(lower, "gb"):
-		mult = 1000 * 1000 * 1000
-		lower = strings.TrimSpace(strings.TrimSuffix(lower, "gb"))
-	case strings.HasSuffix(lower, "b"):
-		lower = strings.TrimSpace(strings.TrimSuffix(lower, "b"))
-	}
-
-	v, err := strconv.ParseInt(lower, 10, 64)
-	if err != nil || v <= 0 {
-		return 0, false
-	}
-	return v * mult, true
 }

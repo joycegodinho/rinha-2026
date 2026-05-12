@@ -13,12 +13,9 @@ import (
 const (
 	maxCentroids    = 4096
 	indexDim        = 14
-	quickProbe              = 8
-	adaptiveQuickProbe      = 6
-	adaptiveQuickRatioLimit = 1.01
-	expandedProbe           = 20
-	expandedProbe3          = 16
-	maxProbe                = 32
+	quickProbe      = 8
+	expandedProbe   = 20
+	maxProbe        = 32
 	vectorsPerBlock = 16
 	blockStride     = indexDim * vectorsPerBlock
 	vectorScale     = 0.0001
@@ -104,18 +101,6 @@ func readU32(r io.Reader) (uint32, error) {
 		return 0, err
 	}
 	return binary.LittleEndian.Uint32(buf[:]), nil
-}
-
-func adaptiveQuickCount(ws *SearchWorkspace, quick, expanded int) int {
-	if quick < 8 || expanded < 8 {
-		return quick
-	}
-	d6 := ws.CentroidDists[ws.Probes[5]]
-	d7 := ws.CentroidDists[ws.Probes[6]]
-	if d6 > 1e-9 && d7/d6 >= adaptiveQuickRatioLimit {
-		return adaptiveQuickProbe
-	}
-	return quick
 }
 
 func topCentroids(q *Vector, centroids []float32, k int, nprobe int, out []int, dists *[maxCentroids]float32) {
@@ -227,11 +212,7 @@ func (db *IVF) FraudCount5TraceProbes(q *Vector, ws *SearchWorkspace, quick, exp
 		if fast != 2 && fast != 3 {
 			return fast, 0
 		}
-		rescoreProbe := expanded
-		if fast == 3 && rescoreProbe > expandedProbe3 {
-			rescoreProbe = expandedProbe3
-		}
-		return db.rescoreQuantized(q, ws, rescoreProbe), 2
+		return db.rescoreQuantized(q, ws, expanded), 2
 	}
 
 	var w Workspace
@@ -285,11 +266,7 @@ func (db *IVF) FraudCount5TraceDetailed(q *Vector, ws *SearchWorkspace, quick, e
 		}
 
 		trace.Path = 2
-		rescoreProbe := expanded
-		if fast == 3 && rescoreProbe > expandedProbe3 {
-			rescoreProbe = expandedProbe3
-		}
-		trace.RescoreBlocks = db.countProbeBlocks(&ws.Probes, 0, rescoreProbe)
+		trace.RescoreBlocks = db.countProbeBlocks(&ws.Probes, 0, expanded)
 		qv := Quantize(q)
 		for i := 0; i < indexDim; i++ {
 			ws.Quantized[i] = float32(qv[i]) * vectorScale
@@ -299,7 +276,7 @@ func (db *IVF) FraudCount5TraceDetailed(q *Vector, ws *SearchWorkspace, quick, e
 			ws.TopLabel[i] = 0
 		}
 		worst = 0
-		db.scanProbesTrace(&ws.Quantized, &ws.Probes, 0, rescoreProbe, &ws.TopDist, &ws.TopLabel, &worst, &trace.RescorePrune)
+		db.scanProbesTrace(&ws.Quantized, &ws.Probes, 0, expanded, &ws.TopDist, &ws.TopLabel, &worst, &trace.RescorePrune)
 		trace.RescoreFrauds = countFrauds(&ws.TopLabel)
 		trace.Frauds = trace.RescoreFrauds
 		return trace
@@ -315,38 +292,7 @@ func (db *IVF) FraudCount5WithProbes(q *Vector, ws *SearchWorkspace, quick int) 
 }
 
 func (db *IVF) FraudCount5WithWorkspace(q *Vector, ws *SearchWorkspace) int {
-	if db.K > 0 {
-		topCentroids(q, db.Centroids, db.K, expandedProbe, ws.Probes[:], &ws.CentroidDists)
-		quick := adaptiveQuickCount(ws, quickProbe, expandedProbe)
-
-		for i := 0; i < 5; i++ {
-			ws.TopDist[i] = float32(math.Inf(1))
-			ws.TopLabel[i] = 0
-		}
-		worst := 0
-
-		db.scanProbes(q, &ws.Probes, 0, quick, &ws.TopDist, &ws.TopLabel, &worst)
-		fast := countFrauds(&ws.TopLabel)
-		if fast != 2 && fast != 3 {
-			return fast
-		}
-
-		rescoreProbe := expandedProbe
-		if fast == 3 && rescoreProbe > expandedProbe3 {
-			rescoreProbe = expandedProbe3
-		}
-		return db.rescoreQuantized(q, ws, rescoreProbe)
-	}
-
-	var w Workspace
-	pairs := db.SearchK(q, &w, 5)
-	frauds := 0
-	for i := 0; i < len(pairs); i++ {
-		if db.Labels[pairs[i].ID] == Fraud {
-			frauds++
-		}
-	}
-	return frauds
+	return db.FraudCount5WithProbes(q, ws, quickProbe)
 }
 
 func (db *IVF) FraudCount5(q *Vector) int {
