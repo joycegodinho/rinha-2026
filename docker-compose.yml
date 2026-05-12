@@ -67,7 +67,7 @@ services:
       - BASE_URL=http://load-balancer:9999
       - READY_RETRIES=240
       - READY_SLEEP=0.25
-      - WARMUP_ROUNDS=48
+      - WARMUP_ROUNDS=120
     volumes:
       - ./scripts/warmup.sh:/warmup.sh:ro
     depends_on:
