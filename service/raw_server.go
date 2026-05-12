@@ -13,6 +13,10 @@ import (
 )
 
 var (
+	rawReadTimeout  = 750 * time.Millisecond
+	rawWriteTimeout = 750 * time.Millisecond
+	rawIdleTimeout  = 10 * time.Second
+
 	http200ReadyKeepAlive = []byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n")
 	http200ReadyClose     = []byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 	http404KeepAlive      = []byte("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n")
@@ -128,6 +132,23 @@ func parseIntBytes(b []byte) int {
 	return v
 }
 
+func isTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	ne, ok := err.(net.Error)
+	return ok && ne.Timeout()
+}
+
+func isCloseValue(v []byte) bool {
+	return len(v) == 5 &&
+		(v[0] == 'c' || v[0] == 'C') &&
+		(v[1] == 'l' || v[1] == 'L') &&
+		(v[2] == 'o' || v[2] == 'O') &&
+		(v[3] == 's' || v[3] == 'S') &&
+		(v[4] == 'e' || v[4] == 'E')
+}
+
 func serveRawConn(conn net.Conn, classifier *handler.Classifier) {
 	defer conn.Close()
 
@@ -136,23 +157,26 @@ func serveRawConn(conn net.Conn, classifier *handler.Classifier) {
 	bodyBuf := make([]byte, 4096)
 
 	for {
-		_ = conn.SetReadDeadline(time.Now().Add(750 * time.Millisecond))
-		_ = conn.SetWriteDeadline(time.Now().Add(750 * time.Millisecond))
+		_ = conn.SetReadDeadline(time.Now().Add(rawIdleTimeout))
 
 		reqLine, err := r.ReadSlice('\n')
 		if err != nil {
-			if err != io.EOF {
+			if err != io.EOF && !isTimeout(err) {
 				_ = writeStaticHTTP(w, "400", false)
 			}
 			return
 		}
 
+		_ = conn.SetReadDeadline(time.Now().Add(rawReadTimeout))
 		keepAlive := true
 		contentLength := 0
 
 		for {
 			line, err := r.ReadSlice('\n')
 			if err != nil {
+				if isTimeout(err) || err == io.EOF {
+					return
+				}
 				_ = writeStaticHTTP(w, "400", false)
 				return
 			}
@@ -164,7 +188,7 @@ func serveRawConn(conn net.Conn, classifier *handler.Classifier) {
 				contentLength = parseIntBytes(headerValue(line))
 			case hasPrefix(line, "Connection:"):
 				v := headerValue(line)
-				if len(v) == 5 && (v[0] == 'c' || v[0] == 'C') {
+				if isCloseValue(v) {
 					keepAlive = false
 				}
 			}
@@ -172,6 +196,7 @@ func serveRawConn(conn net.Conn, classifier *handler.Classifier) {
 
 		switch {
 		case hasPrefix(reqLine, "GET /ready "):
+			_ = conn.SetWriteDeadline(time.Now().Add(rawWriteTimeout))
 			if err := writeStaticHTTP(w, "200-ready", keepAlive); err != nil {
 				return
 			}
@@ -181,18 +206,24 @@ func serveRawConn(conn net.Conn, classifier *handler.Classifier) {
 				return
 			}
 			if _, err := io.ReadFull(r, bodyBuf[:contentLength]); err != nil {
+				if isTimeout(err) || err == io.EOF {
+					return
+				}
 				_ = writeStaticHTTP(w, "400", false)
 				return
 			}
 			fraudCount := classifier.FraudCount(bodyBuf[:contentLength])
+			_ = conn.SetWriteDeadline(time.Now().Add(rawWriteTimeout))
 			if err := writeFraudHTTP(w, fraudCount, keepAlive); err != nil {
 				return
 			}
 		case hasPrefix(reqLine, "GET "):
+			_ = conn.SetWriteDeadline(time.Now().Add(rawWriteTimeout))
 			if err := writeStaticHTTP(w, "404", keepAlive); err != nil {
 				return
 			}
 		default:
+			_ = conn.SetWriteDeadline(time.Now().Add(rawWriteTimeout))
 			if err := writeStaticHTTP(w, "405", keepAlive); err != nil {
 				return
 			}
@@ -227,4 +258,3 @@ func serveRawUnix(rt *appruntime.RuntimeData, socketPath string) {
 		go serveRawConn(conn, classifier)
 	}
 }
-
