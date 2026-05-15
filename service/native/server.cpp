@@ -31,6 +31,8 @@ constexpr int kBacklog = 4096;
 constexpr uint32_t kReadEvents = EPOLLIN | EPOLLRDHUP | EPOLLET;
 constexpr uint32_t kReadWriteEvents = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET;
 
+constexpr std::string_view kGetReadyLine = "GET /ready HTTP/1.1";
+constexpr std::string_view kPostFraudLine = "POST /fraud-score HTTP/1.1";
 constexpr std::string_view kReadyKeepAlive =
     "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n";
 constexpr std::string_view kReadyClose =
@@ -122,24 +124,6 @@ void release_connection(int epfd, int fd, std::vector<Connection>& conns,
   }
 }
 
-bool eq_icase(std::string_view a, std::string_view b) {
-  if (a.size() != b.size()) return false;
-  for (size_t i = 0; i < a.size(); ++i) {
-    char ca = a[i];
-    char cb = b[i];
-    if (ca >= 'A' && ca <= 'Z') ca = static_cast<char>(ca - 'A' + 'a');
-    if (cb >= 'A' && cb <= 'Z') cb = static_cast<char>(cb - 'A' + 'a');
-    if (ca != cb) return false;
-  }
-  return true;
-}
-
-std::string_view trim(std::string_view s) {
-  while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.remove_prefix(1);
-  while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r')) s.remove_suffix(1);
-  return s;
-}
-
 const std::string_view& static_response(int code, bool keep_alive) {
   switch (code) {
     case 200:
@@ -166,20 +150,62 @@ bool append_static_response(Connection& conn, std::string_view resp) {
   return true;
 }
 
-bool contains_icase(std::string_view haystack, std::string_view needle) {
-  if (needle.empty() || haystack.size() < needle.size()) return false;
-  for (size_t i = 0; i + needle.size() <= haystack.size(); ++i) {
-    if (eq_icase(haystack.substr(i, needle.size()), needle)) return true;
+size_t find_crlf(const char* data, size_t from, size_t limit) {
+  for (size_t i = from; i + 1 < limit; ++i) {
+    if (data[i] == '\r' && data[i + 1] == '\n') return i;
   }
-  return false;
+  return std::string_view::npos;
+}
+
+size_t find_headers_end(const char* data, size_t len) {
+  for (size_t i = 0; i + 3 < len; ++i) {
+    if (data[i] == '\r' && data[i + 1] == '\n' && data[i + 2] == '\r' && data[i + 3] == '\n') return i;
+  }
+  return std::string_view::npos;
+}
+
+char ascii_lower(char c) {
+  return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+bool eq_icase_lit(const char* data, size_t len, std::string_view lit) {
+  if (len != lit.size()) return false;
+  for (size_t i = 0; i < len; ++i) {
+    if (ascii_lower(data[i]) != ascii_lower(lit[i])) return false;
+  }
+  return true;
+}
+
+bool parse_content_length(const char* value, size_t len, size_t& out) {
+  size_t i = 0;
+  while (i < len && (value[i] == ' ' || value[i] == '\t')) ++i;
+  if (i == len || value[i] < '0' || value[i] > '9') return false;
+  size_t n = 0;
+  for (; i < len && value[i] >= '0' && value[i] <= '9'; ++i) {
+    n = (n * 10) + static_cast<size_t>(value[i] - '0');
+  }
+  while (i < len && (value[i] == ' ' || value[i] == '\t')) ++i;
+  if (i != len) return false;
+  out = n;
+  return true;
+}
+
+bool value_is_close(const char* value, size_t len) {
+  while (len > 0 && (value[0] == ' ' || value[0] == '\t')) {
+    ++value;
+    --len;
+  }
+  while (len > 0 && (value[len - 1] == ' ' || value[len - 1] == '\t')) --len;
+  return eq_icase_lit(value, len, "close");
 }
 
 bool parse_request(Connection& conn, size_t& consumed) {
-  std::string_view data(conn.inbuf.data(), conn.in_used);
-  size_t headers_end = data.find("\r\n\r\n");
+  const char* data = conn.inbuf.data();
+  const size_t data_len = conn.in_used;
+  size_t headers_end = find_headers_end(data, data_len);
   if (headers_end == std::string_view::npos) return false;
 
-  size_t req_line_end = data.find("\r\n");
+  size_t req_line_end = find_crlf(data, 0, headers_end + 2);
   if (req_line_end == std::string_view::npos || req_line_end > headers_end) {
     conn.out_used = 0;
     if (!append_static_response(conn, k400Close)) return false;
@@ -188,17 +214,16 @@ bool parse_request(Connection& conn, size_t& consumed) {
     return true;
   }
 
-  const std::string_view headers = data.substr(0, headers_end + 4);
-  const std::string_view req_line = data.substr(0, req_line_end);
-  const bool is_get_ready = req_line == "GET /ready HTTP/1.1";
-  const bool is_post_fraud = req_line == "POST /fraud-score HTTP/1.1";
-  const bool is_any_get = req_line.size() >= 4 && req_line.substr(0, 4) == "GET ";
+  const std::string_view req_line(data, req_line_end);
+  const bool is_get_ready = req_line == kGetReadyLine;
+  const bool is_post_fraud = req_line == kPostFraudLine;
+  const bool is_any_get = req_line_end >= 4 && std::memcmp(data, "GET ", 4) == 0;
   bool keep_alive = true;
   size_t content_length = 0;
 
   size_t off = req_line_end + 2;
   while (off < headers_end) {
-    size_t next = data.find("\r\n", off);
+    size_t next = find_crlf(data, off, headers_end + 2);
     if (next == std::string_view::npos || next > headers_end) {
       conn.out_used = 0;
       if (!append_static_response(conn, k400Close)) return false;
@@ -206,15 +231,21 @@ bool parse_request(Connection& conn, size_t& consumed) {
       consumed = conn.in_used;
       return true;
     }
-    std::string_view line = data.substr(off, next - off);
-    size_t colon = line.find(':');
-    if (colon != std::string_view::npos) {
-      std::string_view key = line.substr(0, colon);
-      std::string_view value = trim(line.substr(colon + 1));
-      if (eq_icase(key, "Content-Length")) {
-        content_length = static_cast<size_t>(strtoul(std::string(value).c_str(), nullptr, 10));
-      } else if (eq_icase(key, "Connection") && eq_icase(value, "close")) {
-        keep_alive = false;
+    const char* line = data + off;
+    const size_t line_len = next - off;
+    size_t colon = 0;
+    while (colon < line_len && line[colon] != ':') ++colon;
+    if (colon < line_len) {
+      const char* value = line + colon + 1;
+      const size_t value_len = line_len - colon - 1;
+      if (eq_icase_lit(line, colon, "Content-Length")) {
+        if (!parse_content_length(value, value_len, content_length)) {
+          content_length = 0;
+        }
+      } else if (eq_icase_lit(line, colon, "Connection")) {
+        if (value_is_close(value, value_len)) {
+          keep_alive = false;
+        }
       }
     }
     off = next + 2;
