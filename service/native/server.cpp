@@ -193,6 +193,21 @@ bool parse_content_length(const char* value, size_t len, size_t& out) {
   return true;
 }
 
+bool fast_parse_content_length_line(const char* line, size_t line_len, size_t& out) {
+  if (line_len <= 15 || line[14] != ':') return false;
+  if (std::memcmp(line, "Content-Length", 14) != 0) return false;
+  size_t i = 15;
+  if (i < line_len && line[i] == ' ') ++i;
+  if (i == line_len || line[i] < '0' || line[i] > '9') return false;
+  size_t n = 0;
+  for (; i < line_len && line[i] >= '0' && line[i] <= '9'; ++i) {
+    n = (n * 10) + static_cast<size_t>(line[i] - '0');
+  }
+  if (i != line_len) return false;
+  out = n;
+  return true;
+}
+
 bool value_is_close(const char* value, size_t len) {
   while (len > 0 && (value[0] == ' ' || value[0] == '\t')) {
     ++value;
@@ -272,10 +287,8 @@ FastHeaderStatus fast_post_headers(const char* data, size_t len, size_t headers_
 
     const char* line = data + off;
     const size_t line_len = line_end - off;
-    if (line_len > 15 && line[14] == ':' && std::memcmp(line, "Content-Length", 14) == 0) {
-      if (!parse_content_length(line + 15, line_len - 15, content_length)) {
-        return FastHeaderStatus::Fallback;
-      }
+    if (line_len > 15 && line[14] == ':') {
+      if (!fast_parse_content_length_line(line, line_len, content_length)) return FastHeaderStatus::Fallback;
       found_content_length = true;
     }
     off = line_end + 2;
