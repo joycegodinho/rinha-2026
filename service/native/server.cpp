@@ -206,6 +206,15 @@ bool line_eq(const char* data, size_t len, std::string_view lit) {
   return len == lit.size() && std::memcmp(data, lit.data(), len) == 0;
 }
 
+bool fixed_request_line(const char* data, size_t headers_end, std::string_view lit, size_t& req_line_end) {
+  const size_t n = lit.size();
+  if (headers_end < n + 2) return false;
+  if (std::memcmp(data, lit.data(), n) != 0) return false;
+  if (data[n] != '\r' || data[n + 1] != '\n') return false;
+  req_line_end = n;
+  return true;
+}
+
 size_t find_lit(const char* data, size_t from, size_t limit, std::string_view needle) {
   if (needle.empty() || limit < from || limit - from < needle.size()) return std::string_view::npos;
   const char first = needle[0];
@@ -239,18 +248,25 @@ bool parse_request(Connection& conn, size_t& consumed) {
   size_t headers_end = find_headers_end(data, data_len);
   if (headers_end == std::string_view::npos) return false;
 
-  size_t req_line_end = find_crlf(data, 0, headers_end + 2);
-  if (req_line_end == std::string_view::npos || req_line_end > headers_end) {
-    conn.out_used = 0;
-    if (!append_static_response(conn, k400Close)) return false;
-    conn.close_after_write = true;
-    consumed = data_len;
-    return true;
+  size_t req_line_end = 0;
+  bool is_get_ready = false;
+  bool is_post_fraud = fixed_request_line(data, headers_end, kPostFraudLine, req_line_end);
+  if (!is_post_fraud) {
+    is_get_ready = fixed_request_line(data, headers_end, kGetReadyLine, req_line_end);
   }
-
-  const bool is_get_ready = line_eq(data, req_line_end, kGetReadyLine);
-  const bool is_post_fraud = line_eq(data, req_line_end, kPostFraudLine);
-  const bool is_any_get = req_line_end >= 4 && std::memcmp(data, "GET ", 4) == 0;
+  if (!is_post_fraud && !is_get_ready) {
+    req_line_end = find_crlf(data, 0, headers_end + 2);
+    if (req_line_end == std::string_view::npos || req_line_end > headers_end) {
+      conn.out_used = 0;
+      if (!append_static_response(conn, k400Close)) return false;
+      conn.close_after_write = true;
+      consumed = data_len;
+      return true;
+    }
+    is_get_ready = line_eq(data, req_line_end, kGetReadyLine);
+    is_post_fraud = line_eq(data, req_line_end, kPostFraudLine);
+  }
+  const bool is_any_get = is_get_ready || (req_line_end >= 4 && std::memcmp(data, "GET ", 4) == 0);
   bool keep_alive = true;
   size_t content_length = 0;
 
