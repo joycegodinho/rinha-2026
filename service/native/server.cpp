@@ -70,7 +70,8 @@ struct Connection {
   int fd = -1;
   std::array<char, kReadBufSize> inbuf{};
   std::array<char, kWriteBufSize> outbuf{};
-  size_t in_used = 0;
+  size_t in_start = 0;
+  size_t in_end = 0;
   size_t out_used = 0;
   size_t out_sent = 0;
   bool close_after_write = false;
@@ -91,7 +92,8 @@ void close_fd(int fd) {
 
 void reset_connection(Connection& conn, int fd) {
   conn.fd = fd;
-  conn.in_used = 0;
+  conn.in_start = 0;
+  conn.in_end = 0;
   conn.out_used = 0;
   conn.out_sent = 0;
   conn.close_after_write = false;
@@ -100,7 +102,8 @@ void reset_connection(Connection& conn, int fd) {
 
 void clear_connection(Connection& conn) {
   conn.fd = -1;
-  conn.in_used = 0;
+  conn.in_start = 0;
+  conn.in_end = 0;
   conn.out_used = 0;
   conn.out_sent = 0;
   conn.close_after_write = false;
@@ -200,8 +203,8 @@ bool value_is_close(const char* value, size_t len) {
 }
 
 bool parse_request(Connection& conn, size_t& consumed) {
-  const char* data = conn.inbuf.data();
-  const size_t data_len = conn.in_used;
+  const char* data = conn.inbuf.data() + conn.in_start;
+  const size_t data_len = conn.in_end - conn.in_start;
   size_t headers_end = find_headers_end(data, data_len);
   if (headers_end == std::string_view::npos) return false;
 
@@ -210,7 +213,7 @@ bool parse_request(Connection& conn, size_t& consumed) {
     conn.out_used = 0;
     if (!append_static_response(conn, k400Close)) return false;
     conn.close_after_write = true;
-    consumed = conn.in_used;
+    consumed = data_len;
     return true;
   }
 
@@ -228,7 +231,7 @@ bool parse_request(Connection& conn, size_t& consumed) {
       conn.out_used = 0;
       if (!append_static_response(conn, k400Close)) return false;
       conn.close_after_write = true;
-      consumed = conn.in_used;
+      consumed = data_len;
       return true;
     }
     const char* line = data + off;
@@ -259,11 +262,11 @@ bool parse_request(Connection& conn, size_t& consumed) {
       conn.out_used = 0;
       if (!append_static_response(conn, k400Close)) return false;
       conn.close_after_write = true;
-      consumed = conn.in_used;
+      consumed = data_len;
       return true;
     }
   }
-  if (conn.in_used < total_needed) return false;
+  if (data_len < total_needed) return false;
 
   consumed = total_needed;
   conn.close_after_write = !keep_alive;
@@ -273,7 +276,7 @@ bool parse_request(Connection& conn, size_t& consumed) {
     return append_static_response(conn, resp);
   }
   if (is_post_fraud) {
-    auto* body = reinterpret_cast<uint8_t*>(conn.inbuf.data() + body_start);
+    auto* body = reinterpret_cast<uint8_t*>(conn.inbuf.data() + conn.in_start + body_start);
     int fraud = fraud_classify(body, content_length);
     if (fraud < 0) {
       conn.out_used = 0;
@@ -485,8 +488,22 @@ int main() {
 
       if (ev & EPOLLIN) {
         for (;;) {
-          char buf[4096];
-          ssize_t r = recv(fd, buf, sizeof(buf), 0);
+          if (conn.in_end == conn.inbuf.size() && conn.in_start > 0) {
+            size_t remaining = conn.in_end - conn.in_start;
+            if (remaining > 0) {
+              std::memmove(conn.inbuf.data(), conn.inbuf.data() + conn.in_start, remaining);
+            }
+            conn.in_start = 0;
+            conn.in_end = remaining;
+          }
+          if (conn.in_end == conn.inbuf.size()) {
+            conn.out_used = 0;
+            conn.out_sent = 0;
+            append_static_response(conn, k400Close);
+            conn.close_after_write = true;
+            break;
+          }
+          ssize_t r = recv(fd, conn.inbuf.data() + conn.in_end, conn.inbuf.size() - conn.in_end, 0);
           if (r == 0) {
             release_connection(epfd, fd, conns, fd_to_slot, free_slots);
             goto next_event;
@@ -496,28 +513,22 @@ int main() {
             release_connection(epfd, fd, conns, fd_to_slot, free_slots);
             goto next_event;
           }
-          if (conn.in_used + static_cast<size_t>(r) > conn.inbuf.size()) {
-            conn.out_used = 0;
-            conn.out_sent = 0;
-            append_static_response(conn, k400Close);
-            conn.close_after_write = true;
-            break;
-          }
-          std::memcpy(conn.inbuf.data() + conn.in_used, buf, static_cast<size_t>(r));
-          conn.in_used += static_cast<size_t>(r);
+          conn.in_end += static_cast<size_t>(r);
         }
 
         while (true) {
           size_t consumed = 0;
           if (!parse_request(conn, consumed)) break;
-          if (consumed > 0 && consumed <= conn.in_used) {
-            size_t remaining = conn.in_used - consumed;
-            if (remaining > 0) {
-              std::memmove(conn.inbuf.data(), conn.inbuf.data() + consumed, remaining);
+          size_t available = conn.in_end - conn.in_start;
+          if (consumed > 0 && consumed <= available) {
+            conn.in_start += consumed;
+            if (conn.in_start == conn.in_end) {
+              conn.in_start = 0;
+              conn.in_end = 0;
             }
-            conn.in_used = remaining;
           } else {
-            conn.in_used = 0;
+            conn.in_start = 0;
+            conn.in_end = 0;
           }
           if (conn.close_after_write) break;
           if (conn.out_used != conn.out_sent) break;
