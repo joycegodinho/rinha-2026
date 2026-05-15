@@ -249,7 +249,7 @@ bool parse_request(Connection& conn, size_t& consumed) {
         if (!parse_content_length(value, value_len, content_length)) {
           content_length = 0;
         }
-      } else if (colon == 10 && eq_icase_lit(line, colon, "Connection")) {
+      } else if (!is_post_fraud && colon == 10 && eq_icase_lit(line, colon, "Connection")) {
         if (value_is_close(value, value_len)) {
           keep_alive = false;
         }
