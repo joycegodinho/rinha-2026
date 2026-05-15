@@ -206,35 +206,6 @@ bool line_eq(const char* data, size_t len, std::string_view lit) {
   return len == lit.size() && std::memcmp(data, lit.data(), len) == 0;
 }
 
-size_t find_lit(const char* data, size_t from, size_t limit, std::string_view needle) {
-  if (needle.empty() || limit < from || limit - from < needle.size()) return std::string_view::npos;
-  const char first = needle[0];
-  for (size_t i = from; i + needle.size() <= limit; ++i) {
-    if (data[i] == first && std::memcmp(data + i, needle.data(), needle.size()) == 0) return i;
-  }
-  return std::string_view::npos;
-}
-
-bool fast_content_length(const char* data, size_t from, size_t headers_end, size_t& out) {
-  constexpr std::string_view key = "\r\nContent-Length:";
-  size_t key_pos = find_lit(data, from, headers_end + 2, key);
-  if (key_pos == std::string_view::npos) return false;
-  size_t value_start = key_pos + key.size();
-  size_t value_end = find_crlf(data, value_start, headers_end + 2);
-  if (value_end == std::string_view::npos || value_end > headers_end) return false;
-  return parse_content_length(data + value_start, value_end - value_start, out);
-}
-
-bool fast_connection_close(const char* data, size_t from, size_t headers_end) {
-  constexpr std::string_view key = "\r\nConnection:";
-  size_t key_pos = find_lit(data, from, headers_end + 2, key);
-  if (key_pos == std::string_view::npos) return false;
-  size_t value_start = key_pos + key.size();
-  size_t value_end = find_crlf(data, value_start, headers_end + 2);
-  if (value_end == std::string_view::npos || value_end > headers_end) return false;
-  return value_is_close(data + value_start, value_end - value_start);
-}
-
 bool parse_request(Connection& conn, size_t& consumed) {
   const char* data = conn.inbuf.data() + conn.in_start;
   const size_t data_len = conn.in_end - conn.in_start;
@@ -257,42 +228,34 @@ bool parse_request(Connection& conn, size_t& consumed) {
   size_t content_length = 0;
 
   const size_t headers_start = req_line_end + 2;
-  bool headers_parsed = false;
-  if (is_post_fraud && fast_content_length(data, headers_start, headers_end, content_length)) {
-    keep_alive = !fast_connection_close(data, headers_start, headers_end);
-    headers_parsed = true;
-  }
-
-  if (!headers_parsed) {
-    size_t off = headers_start;
-    while (off < headers_end) {
-      size_t next = find_crlf(data, off, headers_end + 2);
-      if (next == std::string_view::npos || next > headers_end) {
-        conn.out_used = 0;
-        if (!append_static_response(conn, k400Close)) return false;
-        conn.close_after_write = true;
-        consumed = data_len;
-        return true;
-      }
-      const char* line = data + off;
-      const size_t line_len = next - off;
-      size_t colon = 0;
-      while (colon < line_len && line[colon] != ':') ++colon;
-      if (colon < line_len) {
-        const char* value = line + colon + 1;
-        const size_t value_len = line_len - colon - 1;
-        if (eq_icase_lit(line, colon, "Content-Length")) {
-          if (!parse_content_length(value, value_len, content_length)) {
-            content_length = 0;
-          }
-        } else if (eq_icase_lit(line, colon, "Connection")) {
-          if (value_is_close(value, value_len)) {
-            keep_alive = false;
-          }
+  size_t off = headers_start;
+  while (off < headers_end) {
+    size_t next = find_crlf(data, off, headers_end + 2);
+    if (next == std::string_view::npos || next > headers_end) {
+      conn.out_used = 0;
+      if (!append_static_response(conn, k400Close)) return false;
+      conn.close_after_write = true;
+      consumed = data_len;
+      return true;
+    }
+    const char* line = data + off;
+    const size_t line_len = next - off;
+    size_t colon = 0;
+    while (colon < line_len && line[colon] != ':') ++colon;
+    if (colon < line_len) {
+      const char* value = line + colon + 1;
+      const size_t value_len = line_len - colon - 1;
+      if (colon == 14 && eq_icase_lit(line, colon, "Content-Length")) {
+        if (!parse_content_length(value, value_len, content_length)) {
+          content_length = 0;
+        }
+      } else if (colon == 10 && eq_icase_lit(line, colon, "Connection")) {
+        if (value_is_close(value, value_len)) {
+          keep_alive = false;
         }
       }
-      off = next + 2;
     }
+    off = next + 2;
   }
 
   size_t body_start = headers_end + 4;
