@@ -265,6 +265,34 @@ void mod_epoll(int epfd, int fd, uint32_t events) {
   epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 }
 
+enum class FlushStatus {
+  Complete,
+  Pending,
+  Closed,
+};
+
+FlushStatus flush_output(int epfd, int fd, Connection& conn, std::vector<Connection>& conns,
+                         std::vector<int>& fd_to_slot, std::vector<int>& free_slots) {
+  while (conn.out_sent < conn.out_used) {
+    ssize_t w = send(fd, conn.outbuf.data() + conn.out_sent, conn.out_used - conn.out_sent, MSG_NOSIGNAL);
+    if (w < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) return FlushStatus::Pending;
+      release_connection(epfd, fd, conns, fd_to_slot, free_slots);
+      return FlushStatus::Closed;
+    }
+    if (w == 0) return FlushStatus::Pending;
+    conn.out_sent += static_cast<size_t>(w);
+  }
+
+  conn.out_sent = 0;
+  conn.out_used = 0;
+  if (conn.close_after_write) {
+    release_connection(epfd, fd, conns, fd_to_slot, free_slots);
+    return FlushStatus::Closed;
+  }
+  return FlushStatus::Complete;
+}
+
 int create_listener(const char* addr_env) {
   const char* socket_env = std::getenv("SERVICE_SOCKET");
   if (socket_env && socket_env[0] != '\0') {
@@ -465,29 +493,16 @@ int main() {
         }
 
         if (conn.out_used > conn.out_sent) {
-          mod_epoll(epfd, fd, kReadWriteEvents);
+          FlushStatus flushed = flush_output(epfd, fd, conn, conns, fd_to_slot, free_slots);
+          if (flushed == FlushStatus::Closed) goto next_event;
+          mod_epoll(epfd, fd, flushed == FlushStatus::Pending ? kReadWriteEvents : kReadEvents);
         }
       }
 
       if (ev & EPOLLOUT) {
-        while (conn.out_sent < conn.out_used) {
-          ssize_t w = send(fd, conn.outbuf.data() + conn.out_sent, conn.out_used - conn.out_sent, MSG_NOSIGNAL);
-          if (w < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
-            release_connection(epfd, fd, conns, fd_to_slot, free_slots);
-            goto next_event;
-          }
-          conn.out_sent += static_cast<size_t>(w);
-        }
-        if (conn.out_sent == conn.out_used) {
-          conn.out_sent = 0;
-          conn.out_used = 0;
-          if (conn.close_after_write) {
-            release_connection(epfd, fd, conns, fd_to_slot, free_slots);
-            goto next_event;
-          }
-          mod_epoll(epfd, fd, kReadEvents);
-        }
+        FlushStatus flushed = flush_output(epfd, fd, conn, conns, fd_to_slot, free_slots);
+        if (flushed == FlushStatus::Closed) goto next_event;
+        if (flushed == FlushStatus::Complete) mod_epoll(epfd, fd, kReadEvents);
       }
 
     next_event:
