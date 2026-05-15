@@ -28,6 +28,8 @@ constexpr int kMaxTrackedFds = 65536;
 constexpr int kReadBufSize = 8192;
 constexpr int kWriteBufSize = 4096;
 constexpr int kBacklog = 4096;
+constexpr uint32_t kReadEvents = EPOLLIN | EPOLLRDHUP | EPOLLET;
+constexpr uint32_t kReadWriteEvents = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET;
 
 constexpr std::string_view kReadyKeepAlive =
     "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n";
@@ -350,7 +352,7 @@ int main() {
   }
 
   epoll_event listen_ev{};
-  listen_ev.events = EPOLLIN;
+  listen_ev.events = EPOLLIN | EPOLLET;
   listen_ev.data.fd = listen_fd;
   if (epoll_ctl(epfd, EPOLL_CTL_ADD, listen_fd, &listen_ev) < 0) {
     std::perror("epoll_ctl add listen");
@@ -404,7 +406,7 @@ int main() {
           reset_connection(conns[static_cast<size_t>(slot)], cfd);
           fd_to_slot[static_cast<size_t>(cfd)] = slot;
           epoll_event cev{};
-          cev.events = EPOLLIN | EPOLLRDHUP;
+          cev.events = kReadEvents;
           cev.data.fd = cfd;
           epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &cev);
         }
@@ -463,7 +465,7 @@ int main() {
         }
 
         if (conn.out_used > conn.out_sent) {
-          mod_epoll(epfd, fd, EPOLLIN | EPOLLOUT | EPOLLRDHUP);
+          mod_epoll(epfd, fd, kReadWriteEvents);
         }
       }
 
@@ -484,7 +486,7 @@ int main() {
             release_connection(epfd, fd, conns, fd_to_slot, free_slots);
             goto next_event;
           }
-          mod_epoll(epfd, fd, EPOLLIN | EPOLLRDHUP);
+          mod_epoll(epfd, fd, kReadEvents);
         }
       }
 
