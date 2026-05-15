@@ -19,6 +19,7 @@ const (
 	vectorsPerBlock = 16
 	blockStride     = indexDim * vectorsPerBlock
 	vectorScale     = 0.0001
+	initialTopDist  = float32(1.0e30)
 )
 
 func LoadKMeansIndex(path string) (*IVF, error) {
@@ -165,6 +166,117 @@ func countFrauds(topLabel *[5]uint8) int {
 		}
 	}
 	return frauds
+}
+
+func countFraudsBridge(topLabel *[5]uint8) int {
+	return int(topLabel[0] + topLabel[1] + topLabel[2] + topLabel[3] + topLabel[4])
+}
+
+func selectTop8FromDists(k int, out *[maxProbe]int, dists *[maxCentroids]float32) {
+	topD := [quickProbe]float32{
+		initialTopDist, initialTopDist, initialTopDist, initialTopDist,
+		initialTopDist, initialTopDist, initialTopDist, initialTopDist,
+	}
+	var topI [quickProbe]int
+
+	for ci := 0; ci < k; ci++ {
+		dist := dists[ci]
+		if dist >= topD[quickProbe-1] {
+			continue
+		}
+		pos := quickProbe - 1
+		for pos > 0 && dist < topD[pos-1] {
+			topD[pos] = topD[pos-1]
+			topI[pos] = topI[pos-1]
+			pos--
+		}
+		topD[pos] = dist
+		topI[pos] = ci
+	}
+
+	copy(out[:quickProbe], topI[:])
+}
+
+func selectTop20FromDists(k int, out *[maxProbe]int, dists *[maxCentroids]float32) {
+	topD := [expandedProbe]float32{
+		initialTopDist, initialTopDist, initialTopDist, initialTopDist,
+		initialTopDist, initialTopDist, initialTopDist, initialTopDist,
+		initialTopDist, initialTopDist, initialTopDist, initialTopDist,
+		initialTopDist, initialTopDist, initialTopDist, initialTopDist,
+		initialTopDist, initialTopDist, initialTopDist, initialTopDist,
+	}
+	var topI [expandedProbe]int
+
+	for ci := 0; ci < k; ci++ {
+		dist := dists[ci]
+		if dist >= topD[expandedProbe-1] {
+			continue
+		}
+		pos := expandedProbe - 1
+		for pos > 0 && dist < topD[pos-1] {
+			topD[pos] = topD[pos-1]
+			topI[pos] = topI[pos-1]
+			pos--
+		}
+		topD[pos] = dist
+		topI[pos] = ci
+	}
+
+	copy(out[:expandedProbe], topI[:])
+}
+
+func resetTop5(ws *SearchWorkspace) {
+	ws.TopDist[0] = initialTopDist
+	ws.TopDist[1] = initialTopDist
+	ws.TopDist[2] = initialTopDist
+	ws.TopDist[3] = initialTopDist
+	ws.TopDist[4] = initialTopDist
+	ws.TopLabel[0] = 0
+	ws.TopLabel[1] = 0
+	ws.TopLabel[2] = 0
+	ws.TopLabel[3] = 0
+	ws.TopLabel[4] = 0
+}
+
+func (db *IVF) rescoreQuantizedBridge(qv *Vector, ws *SearchWorkspace) int {
+	for i := 0; i < indexDim; i++ {
+		x := int(qv[i]*Scale + 0.5)
+		if qv[i] < 0 {
+			x = int(qv[i]*Scale - 0.5)
+		}
+		if x < -32768 {
+			x = -32768
+		} else if x > 32767 {
+			x = 32767
+		}
+		ws.Quantized[i] = float32(int16(x)) * vectorScale
+	}
+
+	resetTop5(ws)
+	worst := 0
+
+	db.scanProbes(&ws.Quantized, &ws.Probes, 0, expandedProbe, &ws.TopDist, &ws.TopLabel, &worst)
+	return countFraudsBridge(&ws.TopLabel)
+}
+
+func (db *IVF) FraudCount5Bridge(q *Vector, ws *SearchWorkspace) int {
+	if db.K == 0 {
+		return db.FraudCount5WithWorkspace(q, ws)
+	}
+
+	centroidDists(q, db.Centroids, db.K, &ws.CentroidDists)
+	selectTop8FromDists(db.K, &ws.Probes, &ws.CentroidDists)
+
+	resetTop5(ws)
+	worst := 0
+
+	db.scanProbes(q, &ws.Probes, 0, quickProbe, &ws.TopDist, &ws.TopLabel, &worst)
+	fast := countFraudsBridge(&ws.TopLabel)
+	if fast != 2 && fast != 3 {
+		return fast
+	}
+	selectTop20FromDists(db.K, &ws.Probes, &ws.CentroidDists)
+	return db.rescoreQuantizedBridge(q, ws)
 }
 
 func (db *IVF) rescoreQuantized(qv *Vector, ws *SearchWorkspace, nprobe int) int {

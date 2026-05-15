@@ -145,6 +145,50 @@ func BenchmarkFraudCount5WithWorkspace(b *testing.B) {
 	}
 }
 
+func TestFraudCount5BridgeMatchesWorkspace(t *testing.T) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	queries := []Vector{
+		{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134},
+		{0.0312, 0.1111, 0.728, 0.0434, 0.2222, 0.0, 0.074, 0.023, 0.1, 0, 1, 0, 0.7, 0.001},
+		{0.8125, 0.8888, 0.183, 0.7391, 0.7777, 0.91, 0.81, 0.62, 0.9, 1, 1, 1, 0.2, 0.42},
+	}
+	for i := 0; i < 128; i++ {
+		var q Vector
+		for d := 0; d < indexDim; d++ {
+			q[d] = float32(((i+3)*(d+5))%997) / 997
+		}
+		queries = append(queries, q)
+	}
+
+	for i := range queries {
+		var bridgeWS, baseWS SearchWorkspace
+		got := db.FraudCount5Bridge(&queries[i], &bridgeWS)
+		want := db.FraudCount5WithWorkspace(&queries[i], &baseWS)
+		if got != want {
+			t.Fatalf("query %d: bridge=%d workspace=%d q=%v", i, got, want, queries[i])
+		}
+	}
+}
+
+func BenchmarkFraudCount5Bridge(b *testing.B) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		b.Fatal(err)
+	}
+	q := Vector{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134}
+	var ws SearchWorkspace
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = db.FraudCount5Bridge(&q, &ws)
+	}
+}
+
 func BenchmarkFraudCount5QuickProbes(b *testing.B) {
 	db, err := LoadKMeansIndex(benchmarkIndexPath())
 	if err != nil {
