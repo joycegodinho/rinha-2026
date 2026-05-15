@@ -215,6 +215,15 @@ bool fixed_request_line(const char* data, size_t headers_end, std::string_view l
   return true;
 }
 
+bool fixed_request_prefix(const char* data, size_t len, std::string_view lit, size_t& req_line_end) {
+  const size_t n = lit.size();
+  if (len < n + 2) return false;
+  if (std::memcmp(data, lit.data(), n) != 0) return false;
+  if (data[n] != '\r' || data[n + 1] != '\n') return false;
+  req_line_end = n;
+  return true;
+}
+
 size_t find_lit(const char* data, size_t from, size_t limit, std::string_view needle) {
   if (needle.empty() || limit < from || limit - from < needle.size()) return std::string_view::npos;
   const char first = needle[0];
@@ -242,13 +251,78 @@ bool fast_content_length(const char* data, size_t from, size_t headers_end, size
   return parse_content_length(data + value_start, value_end - value_start, out);
 }
 
+enum class FastHeaderStatus {
+  Incomplete,
+  Ready,
+  Fallback,
+};
+
+FastHeaderStatus fast_post_headers(const char* data, size_t len, size_t headers_start,
+                                   size_t& headers_end, size_t& content_length) {
+  bool found_content_length = false;
+  size_t off = headers_start;
+  while (off < len) {
+    size_t line_end = find_crlf(data, off, len);
+    if (line_end == std::string_view::npos) return FastHeaderStatus::Incomplete;
+    if (line_end == off) {
+      if (off < 2) return FastHeaderStatus::Fallback;
+      headers_end = off - 2;
+      return found_content_length ? FastHeaderStatus::Ready : FastHeaderStatus::Fallback;
+    }
+
+    const char* line = data + off;
+    const size_t line_len = line_end - off;
+    if (line_len > 15 && line[14] == ':' && std::memcmp(line, "Content-Length", 14) == 0) {
+      if (!parse_content_length(line + 15, line_len - 15, content_length)) {
+        return FastHeaderStatus::Fallback;
+      }
+      found_content_length = true;
+    }
+    off = line_end + 2;
+  }
+  return FastHeaderStatus::Incomplete;
+}
+
 bool parse_request(Connection& conn, size_t& consumed) {
   const char* data = conn.inbuf.data() + conn.in_start;
   const size_t data_len = conn.in_end - conn.in_start;
+  size_t req_line_end = 0;
+  if (fixed_request_prefix(data, data_len, kPostFraudLine, req_line_end)) {
+    size_t headers_end = 0;
+    size_t content_length = 0;
+    FastHeaderStatus status = fast_post_headers(data, data_len, req_line_end + 2, headers_end, content_length);
+    if (status == FastHeaderStatus::Incomplete) return false;
+    if (status == FastHeaderStatus::Ready) {
+      size_t body_start = headers_end + 4;
+      size_t total_needed = body_start + content_length;
+      if (content_length == 0 || content_length > static_cast<size_t>(kReadBufSize)) {
+        conn.out_used = 0;
+        if (!append_static_response(conn, k400Close)) return false;
+        conn.close_after_write = true;
+        consumed = data_len;
+        return true;
+      }
+      if (data_len < total_needed) return false;
+
+      consumed = total_needed;
+      conn.close_after_write = false;
+      auto* body = reinterpret_cast<uint8_t*>(conn.inbuf.data() + conn.in_start + body_start);
+      int fraud = fraud_classify(body, content_length);
+      if (fraud < 0) {
+        conn.out_used = 0;
+        if (!append_static_response(conn, k400Close)) return false;
+        conn.close_after_write = true;
+        return true;
+      }
+      const auto& resp = kFraudKeepAlive[clamp_fraud(fraud)];
+      return append_static_response(conn, resp);
+    }
+  }
+
   size_t headers_end = find_headers_end(data, data_len);
   if (headers_end == std::string_view::npos) return false;
 
-  size_t req_line_end = 0;
+  req_line_end = 0;
   bool is_get_ready = false;
   bool is_post_fraud = fixed_request_line(data, headers_end, kPostFraudLine, req_line_end);
   if (!is_post_fraud) {
