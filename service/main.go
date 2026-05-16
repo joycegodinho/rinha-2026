@@ -83,10 +83,23 @@ func main() {
 	tuneGCForHotPath()
 
 	socketPath := os.Getenv("SOCKET_PATH")
+	mode := os.Getenv("SERVICE_MODE")
+	if mode == "uringraw" {
+		serveUringRaw(rt, serviceAddr())
+		return
+	}
+	if mode == "uringdirect" {
+		serveUringDirect(rt, serviceAddr())
+		return
+	}
+	if mode == "rawtcp" {
+		serveRawTCP(rt, serviceAddr())
+		return
+	}
 	if socketPath == "" {
 		log.Fatal("SOCKET_PATH environment variable not set")
 	}
-	if os.Getenv("SERVICE_MODE") == "raw" {
+	if mode == "raw" {
 		serveRawUnix(rt, socketPath)
 		return
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -50,33 +51,6 @@ func responsePrefix(status string, keepAlive bool) []byte {
 		}
 		return http400Close
 	}
-}
-
-func writeFraudHTTP(w *bufio.Writer, fraudCount int, keepAlive bool) error {
-	body := handler.FraudResponse(fraudCount)
-	connHeader := "keep-alive"
-	if !keepAlive {
-		connHeader = "close"
-	}
-	if _, err := w.WriteString("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "); err != nil {
-		return err
-	}
-	if _, err := w.WriteString(itoa(len(body))); err != nil {
-		return err
-	}
-	if _, err := w.WriteString("\r\nConnection: "); err != nil {
-		return err
-	}
-	if _, err := w.WriteString(connHeader); err != nil {
-		return err
-	}
-	if _, err := w.WriteString("\r\n\r\n"); err != nil {
-		return err
-	}
-	if _, err := w.Write(body); err != nil {
-		return err
-	}
-	return w.Flush()
 }
 
 func writeStaticHTTP(w *bufio.Writer, status string, keepAlive bool) error {
@@ -132,9 +106,49 @@ func parseIntBytes(b []byte) int {
 	return v
 }
 
+func clampFraudCountRaw(fraudCount int) int {
+	if fraudCount < 0 {
+		return 0
+	}
+	if fraudCount > 5 {
+		return 5
+	}
+	return fraudCount
+}
+
+func writeFraudHTTP(w *bufio.Writer, fraudCount int, keepAlive bool) error {
+	body := handler.FraudResponse(clampFraudCountRaw(fraudCount))
+	connHeader := "keep-alive"
+	if !keepAlive {
+		connHeader = "close"
+	}
+	if _, err := w.WriteString("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "); err != nil {
+		return err
+	}
+	if _, err := w.WriteString(itoa(len(body))); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\r\nConnection: "); err != nil {
+		return err
+	}
+	if _, err := w.WriteString(connHeader); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\r\n\r\n"); err != nil {
+		return err
+	}
+	if _, err := w.Write(body); err != nil {
+		return err
+	}
+	return w.Flush()
+}
+
 func isTimeout(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
 	}
 	ne, ok := err.(net.Error)
 	return ok && ne.Timeout()
@@ -235,6 +249,18 @@ func serveRawConn(conn net.Conn, classifier *handler.Classifier) {
 	}
 }
 
+func serveRawListener(ln net.Listener, classifier *handler.Classifier, logLabel string) {
+	log.Printf("%s running on %s", logLabel, ln.Addr())
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Printf("%s accept error: %v", logLabel, err)
+			continue
+		}
+		go serveRawConn(conn, classifier)
+	}
+}
+
 func serveRawUnix(rt *appruntime.RuntimeData, socketPath string) {
 	_ = os.Remove(socketPath)
 
@@ -247,14 +273,15 @@ func serveRawUnix(rt *appruntime.RuntimeData, socketPath string) {
 	}
 
 	classifier := handler.NewClassifier(rt)
-	log.Printf("Raw service running on socket %s", socketPath)
+	serveRawListener(ln, classifier, "Raw service")
+}
 
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Printf("raw accept error: %v", err)
-			continue
-		}
-		go serveRawConn(conn, classifier)
+func serveRawTCP(rt *appruntime.RuntimeData, addr string) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Error creating raw TCP listener: %v", err)
 	}
+
+	classifier := handler.NewClassifier(rt)
+	serveRawListener(ln, classifier, "Raw TCP service")
 }

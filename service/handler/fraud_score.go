@@ -330,7 +330,7 @@ func isUnknownParsed(merchantID []byte, known [][]byte, count int) float32 {
 	return 1
 }
 
-func buildVectorUltra(body []byte, r *runtime.RuntimeData, out *ivf.Vector) {
+func buildVectorUltraGo(body []byte, r *runtime.RuntimeData, out *ivf.Vector) {
 	*out = ivf.Vector{}
 	n := &r.Norm
 

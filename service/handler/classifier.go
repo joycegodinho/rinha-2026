@@ -20,6 +20,11 @@ type requestState struct {
 	ws ivf.SearchWorkspace
 }
 
+type DirectState struct {
+	q  ivf.Vector
+	ws ivf.SearchWorkspace
+}
+
 type Classifier struct {
 	rt   *runtime.RuntimeData
 	pool sync.Pool
@@ -55,3 +60,11 @@ func (c *Classifier) FraudCount(body []byte) int {
 	return fraudCount
 }
 
+func (c *Classifier) FraudCountDirect(body []byte, state *DirectState) int {
+	buildVectorUltra(body, c.rt, &state.q)
+	return c.rt.DB.FraudCount5WithWorkspace(&state.q, &state.ws)
+}
+
+func (c *Classifier) FraudCountVectorDirect(q *ivf.Vector, state *DirectState) int {
+	return c.rt.DB.FraudCount5WithWorkspace(q, &state.ws)
+}

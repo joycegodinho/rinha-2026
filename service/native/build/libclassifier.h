@@ -82,6 +82,7 @@ extern "C" {
 
 extern int fraud_init();
 extern int fraud_classify(uint8_t* body, size_t n);
+extern int fraud_classify_vector(float* vec);
 
 #ifdef __cplusplus
 }

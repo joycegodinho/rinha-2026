@@ -1,0 +1,106 @@
+services:
+  service-1:
+    image: joycegodinhoo/rinha-2026-api:v0.2.0
+    platform: linux/amd64
+    environment:
+      GC_MODE: off
+      GOGC: "500"
+      GOMEMLIMIT: "60MiB"
+      VECTOR_MODE: native
+      FD_CONTROL_SOCKET: /sockets/fd-service-1.sock
+    volumes:
+      - sockets-volume:/sockets
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: "149M"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  service-2:
+    image: joycegodinhoo/rinha-2026-api:v0.2.0
+    platform: linux/amd64
+    environment:
+      GC_MODE: off
+      GOGC: "500"
+      GOMEMLIMIT: "60MiB"
+      VECTOR_MODE: native
+      FD_CONTROL_SOCKET: /sockets/fd-service-2.sock
+    volumes:
+      - sockets-volume:/sockets
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: "149M"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  load-balancer:
+    image: joycegodinhoo/rinha-2026-lb:v0.2.0
+    platform: linux/amd64
+    ports:
+      - "9999:9999"
+    depends_on:
+      - service-1
+      - service-2
+    environment:
+      FD_LB_ADDR: 0.0.0.0:9999
+      FD_TARGET_1: /sockets/fd-service-1.sock
+      FD_TARGET_2: /sockets/fd-service-2.sock
+    volumes:
+      - sockets-volume:/sockets
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.16"
+          memory: "40M"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  warmup:
+    image: curlimages/curl:8.8.0
+    platform: linux/amd64
+    entrypoint: ["/bin/sh", "/warmup.sh"]
+    environment:
+      - BASE_URL=http://load-balancer:9999
+      - READY_RETRIES=240
+      - READY_SLEEP=0.25
+      - WARMUP_ROUNDS=48
+    volumes:
+      - ./scripts/warmup.sh:/warmup.sh:ro
+    depends_on:
+      - load-balancer
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.04"
+          memory: "12M"
+    restart: "no"
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  sockets-volume:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=4m,mode=0777

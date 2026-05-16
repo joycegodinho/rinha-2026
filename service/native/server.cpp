@@ -19,8 +19,13 @@
 #include <vector>
 
 #include "libclassifier.h"
+#include "native_vector.hpp"
 
 namespace {
+
+bool g_fake_classifier = false;
+bool g_cpp_vector_parser = false;
+bool g_fd_receiver = false;
 
 constexpr int kMaxEvents = 1024;
 constexpr int kMaxConnections = 4096;
@@ -76,6 +81,7 @@ struct Connection {
   size_t out_sent = 0;
   bool close_after_write = false;
   bool active = false;
+  uint32_t generation = 0;
 };
 
 int set_nonblocking(int fd) {
@@ -98,6 +104,8 @@ void reset_connection(Connection& conn, int fd) {
   conn.out_sent = 0;
   conn.close_after_write = false;
   conn.active = true;
+  ++conn.generation;
+  if (conn.generation == 0) conn.generation = 1;
 }
 
 void clear_connection(Connection& conn) {
@@ -108,6 +116,11 @@ void clear_connection(Connection& conn) {
   conn.out_sent = 0;
   conn.close_after_write = false;
   conn.active = false;
+}
+
+uint64_t make_client_event_id(int slot, uint32_t generation) {
+  return (static_cast<uint64_t>(generation) << 32) |
+         static_cast<uint64_t>(static_cast<uint32_t>(slot + 1));
 }
 
 void release_connection(int epfd, int fd, std::vector<Connection>& conns,
@@ -151,6 +164,29 @@ bool append_static_response(Connection& conn, std::string_view resp) {
   std::memcpy(conn.outbuf.data() + conn.out_used, resp.data(), resp.size());
   conn.out_used += resp.size();
   return true;
+}
+
+bool env_equals(const char* value, const char* expected) {
+  return value && std::strcmp(value, expected) == 0;
+}
+
+int fake_classify(const uint8_t* body, size_t n) {
+  if (body == nullptr || n == 0) return -1;
+  uint32_t x = static_cast<uint32_t>(n);
+  x += static_cast<uint32_t>(body[0]);
+  x += static_cast<uint32_t>(body[n >> 1]) << 1;
+  x += static_cast<uint32_t>(body[n - 1]) << 2;
+  return static_cast<int>(x % kFraudKeepAlive.size());
+}
+
+int classify_body(const uint8_t* body, size_t n) {
+  if (g_fake_classifier) return fake_classify(body, n);
+  if (g_cpp_vector_parser) {
+    std::array<float, 16> vector;
+    if (!build_fraud_vector_cpp(body, n, vector.data())) return -1;
+    return fraud_classify_vector(vector.data());
+  }
+  return fraud_classify(const_cast<uint8_t*>(body), n);
 }
 
 size_t find_crlf(const char* data, size_t from, size_t limit) {
@@ -320,7 +356,7 @@ bool parse_request(Connection& conn, size_t& consumed) {
       consumed = total_needed;
       conn.close_after_write = false;
       auto* body = reinterpret_cast<uint8_t*>(conn.inbuf.data() + conn.in_start + body_start);
-      int fraud = fraud_classify(body, content_length);
+      int fraud = classify_body(body, content_length);
       if (fraud < 0) {
         conn.out_used = 0;
         if (!append_static_response(conn, k400Close)) return false;
@@ -418,7 +454,7 @@ bool parse_request(Connection& conn, size_t& consumed) {
   }
   if (is_post_fraud) {
     auto* body = reinterpret_cast<uint8_t*>(conn.inbuf.data() + conn.in_start + body_start);
-    int fraud = fraud_classify(body, content_length);
+    int fraud = classify_body(body, content_length);
     if (fraud < 0) {
       conn.out_used = 0;
       if (!append_static_response(conn, k400Close)) return false;
@@ -433,10 +469,10 @@ bool parse_request(Connection& conn, size_t& consumed) {
   return append_static_response(conn, resp);
 }
 
-void mod_epoll(int epfd, int fd, uint32_t events) {
+void mod_epoll(int epfd, int fd, uint32_t events, uint64_t event_id) {
   epoll_event ev{};
   ev.events = events;
-  ev.data.fd = fd;
+  ev.data.u64 = event_id;
   epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 }
 
@@ -468,35 +504,61 @@ FlushStatus flush_output(int epfd, int fd, Connection& conn, std::vector<Connect
   return FlushStatus::Complete;
 }
 
-int create_listener(const char* addr_env) {
-  const char* socket_env = std::getenv("SERVICE_SOCKET");
-  if (socket_env && socket_env[0] != '\0') {
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (fd < 0) return -1;
-    if (set_nonblocking(fd) < 0) {
-      close_fd(fd);
-      return -1;
-    }
-    sockaddr_un sa{};
-    sa.sun_family = AF_UNIX;
-    if (std::strlen(socket_env) >= sizeof(sa.sun_path)) {
-      close_fd(fd);
-      return -1;
-    }
-    std::strncpy(sa.sun_path, socket_env, sizeof(sa.sun_path) - 1);
-    unlink(socket_env);
-    if (bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) < 0) {
-      close_fd(fd);
-      return -1;
-    }
-    chmod(socket_env, 0777);
-    if (listen(fd, kBacklog) < 0) {
-      close_fd(fd);
-      return -1;
-    }
-    return fd;
+int create_unix_listener(const char* socket_path) {
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (fd < 0) return -1;
+  if (set_nonblocking(fd) < 0) {
+    close_fd(fd);
+    return -1;
   }
+  sockaddr_un sa{};
+  sa.sun_family = AF_UNIX;
+  if (std::strlen(socket_path) >= sizeof(sa.sun_path)) {
+    close_fd(fd);
+    return -1;
+  }
+  std::strncpy(sa.sun_path, socket_path, sizeof(sa.sun_path) - 1);
+  unlink(socket_path);
+  if (bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) < 0) {
+    close_fd(fd);
+    return -1;
+  }
+  chmod(socket_path, 0777);
+  if (listen(fd, kBacklog) < 0) {
+    close_fd(fd);
+    return -1;
+  }
+  return fd;
+}
 
+int recv_passed_fd(int sock) {
+  char byte = 0;
+  iovec iov{};
+  iov.iov_base = &byte;
+  iov.iov_len = 1;
+
+  char control[CMSG_SPACE(sizeof(int))]{};
+  msghdr msg{};
+  msg.msg_iov = &iov;
+  msg.msg_iovlen = 1;
+  msg.msg_control = control;
+  msg.msg_controllen = sizeof(control);
+
+  ssize_t n = recvmsg(sock, &msg, 0);
+  if (n <= 0) return -1;
+
+  for (cmsghdr* cmsg = CMSG_FIRSTHDR(&msg); cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+    if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS &&
+        cmsg->cmsg_len >= CMSG_LEN(sizeof(int))) {
+      int fd = -1;
+      std::memcpy(&fd, CMSG_DATA(cmsg), sizeof(int));
+      return fd;
+    }
+  }
+  return -1;
+}
+
+int create_tcp_listener(const char* addr_env) {
   std::string addr = addr_env ? addr_env : "0.0.0.0:8081";
   auto pos = addr.rfind(':');
   if (pos == std::string::npos) return -1;
@@ -532,16 +594,36 @@ int create_listener(const char* addr_env) {
   return fd;
 }
 
+int create_listener(const char* addr_env) {
+  const char* socket_env = std::getenv("SERVICE_SOCKET");
+  if (socket_env && socket_env[0] != '\0') {
+    return create_unix_listener(socket_env);
+  }
+
+  return create_tcp_listener(addr_env);
+}
+
 }  // namespace
 
 int main() {
-  if (fraud_init() != 0) {
+  g_fake_classifier = env_equals(std::getenv("NATIVE_CLASSIFIER_MODE"), "fake");
+  g_cpp_vector_parser = env_equals(std::getenv("VECTOR_MODE"), "native") ||
+                        env_equals(std::getenv("NATIVE_VECTOR_MODE"), "cpp");
+  const char* fd_control_socket = std::getenv("FD_CONTROL_SOCKET");
+  g_fd_receiver = fd_control_socket && fd_control_socket[0] != '\0';
+  if (!g_fake_classifier && fraud_init() != 0) {
     std::fprintf(stderr, "native bridge init failed\n");
     return 1;
   }
+  if (g_fake_classifier) {
+    std::fprintf(stderr, "native fake classifier mode enabled\n");
+  }
+  if (!g_fake_classifier && g_cpp_vector_parser) {
+    std::fprintf(stderr, "native C++ vector parser enabled\n");
+  }
 
   const char* addr = std::getenv("SERVICE_ADDR");
-  int listen_fd = create_listener(addr);
+  int listen_fd = g_fd_receiver ? create_unix_listener(fd_control_socket) : create_listener(addr);
   if (listen_fd < 0) {
     std::perror("listen");
     return 1;
@@ -556,7 +638,7 @@ int main() {
 
   epoll_event listen_ev{};
   listen_ev.events = EPOLLIN | EPOLLET;
-  listen_ev.data.fd = listen_fd;
+  listen_ev.data.u64 = 0;
   if (epoll_ctl(epfd, EPOLL_CTL_ADD, listen_fd, &listen_ev) < 0) {
     std::perror("epoll_ctl add listen");
     close_fd(epfd);
@@ -566,7 +648,8 @@ int main() {
 
   const char* socket_path = std::getenv("SERVICE_SOCKET");
   std::fprintf(stderr, "native epoll service running on %s\n",
-               socket_path && socket_path[0] != '\0' ? socket_path : (addr ? addr : "0.0.0.0:8081"));
+               g_fd_receiver ? fd_control_socket :
+               (socket_path && socket_path[0] != '\0' ? socket_path : (addr ? addr : "0.0.0.0:8081")));
 
   std::vector<Connection> conns(static_cast<size_t>(kMaxConnections));
   std::vector<int> fd_to_slot(static_cast<size_t>(kMaxTrackedFds), -1);
@@ -576,6 +659,29 @@ int main() {
     free_slots.push_back(slot);
   }
   std::array<epoll_event, kMaxEvents> events{};
+  auto add_client = [&](int cfd, bool is_tcp) {
+    if (is_tcp) {
+      int one = 1;
+      setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    }
+    if (set_nonblocking(cfd) < 0) {
+      close_fd(cfd);
+      return;
+    }
+    if (static_cast<size_t>(cfd) >= fd_to_slot.size() || free_slots.empty()) {
+      close_fd(cfd);
+      return;
+    }
+    int slot = free_slots.back();
+    free_slots.pop_back();
+    reset_connection(conns[static_cast<size_t>(slot)], cfd);
+    Connection& conn = conns[static_cast<size_t>(slot)];
+    fd_to_slot[static_cast<size_t>(cfd)] = slot;
+    epoll_event cev{};
+    cev.events = kReadEvents;
+    cev.data.u64 = make_client_event_id(slot, conn.generation);
+    epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &cev);
+  };
 
   for (;;) {
     int n = epoll_wait(epfd, events.data(), static_cast<int>(events.size()), -1);
@@ -586,41 +692,37 @@ int main() {
     }
 
     for (int i = 0; i < n; ++i) {
-      int fd = events[i].data.fd;
+      uint64_t event_id = events[i].data.u64;
       uint32_t ev = events[i].events;
 
-      if (fd == listen_fd) {
+      if (event_id == 0) {
         for (;;) {
-          int cfd = accept4(listen_fd, nullptr, nullptr, SOCK_NONBLOCK);
+          int cfd = accept4(listen_fd, nullptr, nullptr, g_fd_receiver ? SOCK_CLOEXEC : SOCK_NONBLOCK);
           if (cfd < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) break;
             break;
           }
-          int one = 1;
-          if (!(socket_path && socket_path[0] != '\0')) {
-            setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-          }
-          if (static_cast<size_t>(cfd) >= fd_to_slot.size() || free_slots.empty()) {
+
+          if (g_fd_receiver) {
+            int passed = recv_passed_fd(cfd);
             close_fd(cfd);
+            if (passed >= 0) {
+              add_client(passed, true);
+            }
             continue;
           }
-          int slot = free_slots.back();
-          free_slots.pop_back();
-          reset_connection(conns[static_cast<size_t>(slot)], cfd);
-          fd_to_slot[static_cast<size_t>(cfd)] = slot;
-          epoll_event cev{};
-          cev.events = kReadEvents;
-          cev.data.fd = cfd;
-          epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &cev);
+
+          add_client(cfd, !(socket_path && socket_path[0] != '\0'));
         }
         continue;
       }
 
-      if (fd < 0 || static_cast<size_t>(fd) >= fd_to_slot.size()) continue;
-      int slot = fd_to_slot[static_cast<size_t>(fd)];
+      int slot = static_cast<int>((event_id & 0xffffffffu) - 1u);
       if (slot < 0 || static_cast<size_t>(slot) >= conns.size()) continue;
       Connection& conn = conns[static_cast<size_t>(slot)];
+      if (conn.generation != static_cast<uint32_t>(event_id >> 32)) continue;
       if (!conn.active) continue;
+      int fd = conn.fd;
 
       if (ev & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
         release_connection(epfd, fd, conns, fd_to_slot, free_slots);
@@ -678,14 +780,18 @@ int main() {
         if (conn.out_used > conn.out_sent) {
           FlushStatus flushed = flush_output(epfd, fd, conn, conns, fd_to_slot, free_slots);
           if (flushed == FlushStatus::Closed) goto next_event;
-          mod_epoll(epfd, fd, flushed == FlushStatus::Pending ? kReadWriteEvents : kReadEvents);
+          if (flushed == FlushStatus::Pending) {
+            mod_epoll(epfd, fd, kReadWriteEvents, event_id);
+          } else if (ev & EPOLLOUT) {
+            mod_epoll(epfd, fd, kReadEvents, event_id);
+          }
         }
       }
 
       if (ev & EPOLLOUT) {
         FlushStatus flushed = flush_output(epfd, fd, conn, conns, fd_to_slot, free_slots);
         if (flushed == FlushStatus::Closed) goto next_event;
-        if (flushed == FlushStatus::Complete) mod_epoll(epfd, fd, kReadEvents);
+        if (flushed == FlushStatus::Complete) mod_epoll(epfd, fd, kReadEvents, event_id);
       }
 
     next_event:

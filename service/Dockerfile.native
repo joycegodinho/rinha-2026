@@ -1,0 +1,34 @@
+FROM golang:1.25-bookworm AS builder
+WORKDIR /src
+
+ARG GOAMD64=v3
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential make ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
+
+COPY . .
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd native && \
+    make GOAMD64=${GOAMD64} all
+
+FROM debian:bookworm-slim AS prod
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates libstdc++6 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/native/build/native-server /app/native-server
+COPY index.bin.gz /app/service/index.bin.gz
+COPY normalization.json /app/service/normalization.json
+COPY mcc_risk.json /app/service/mcc_risk.json
+
+CMD ["/app/native-server"]
