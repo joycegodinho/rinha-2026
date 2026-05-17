@@ -1,6 +1,6 @@
 services:
   service-1:
-    image: joycegodinhoo/rinha-2026-api:v0.2.2
+    image: joycegodinhoo/rinha-2026-api:v0.2.3
     platform: linux/amd64
     environment:
       GC_MODE: off
@@ -23,7 +23,7 @@ services:
         hard: 65535
 
   service-2:
-    image: joycegodinhoo/rinha-2026-api:v0.2.2
+    image: joycegodinhoo/rinha-2026-api:v0.2.3
     platform: linux/amd64
     environment:
       GC_MODE: off
@@ -46,7 +46,7 @@ services:
         hard: 65535
 
   load-balancer:
-    image: joycegodinhoo/rinha-2026-lb:v0.2.2
+    image: joycegodinhoo/rinha-2026-lb:v0.2.3
     platform: linux/amd64
     ports:
       - "9999:9999"
