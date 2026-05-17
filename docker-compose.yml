@@ -1,6 +1,6 @@
 services:
   service-1:
-    image: joycegodinhoo/rinha-2026-api:v0.2.0
+    image: joycegodinhoo/rinha-2026-api:v0.2.1
     platform: linux/amd64
     environment:
       GC_MODE: off
@@ -15,7 +15,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.40"
+          cpus: "0.30"
           memory: "149M"
     ulimits:
       nofile:
@@ -23,7 +23,7 @@ services:
         hard: 65535
 
   service-2:
-    image: joycegodinhoo/rinha-2026-api:v0.2.0
+    image: joycegodinhoo/rinha-2026-api:v0.2.1
     platform: linux/amd64
     environment:
       GC_MODE: off
@@ -38,7 +38,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.40"
+          cpus: "0.30"
           memory: "149M"
     ulimits:
       nofile:
@@ -46,7 +46,7 @@ services:
         hard: 65535
 
   load-balancer:
-    image: joycegodinhoo/rinha-2026-lb:v0.2.0
+    image: joycegodinhoo/rinha-2026-lb:v0.2.1
     platform: linux/amd64
     ports:
       - "9999:9999"
@@ -57,6 +57,9 @@ services:
       FD_LB_ADDR: 0.0.0.0:9999
       FD_TARGET_1: /sockets/fd-service-1.sock
       FD_TARGET_2: /sockets/fd-service-2.sock
+      FD_LB_WORKERS: "2"
+      FD_LB_REUSEPORT: "1"
+      FD_LB_LOCAL_RR: "0"
     volumes:
       - sockets-volume:/sockets
     networks:
@@ -64,7 +67,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.16"
+          cpus: "0.36"
           memory: "40M"
     ulimits:
       nofile:
