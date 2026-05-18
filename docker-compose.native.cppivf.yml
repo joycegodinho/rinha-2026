@@ -1,0 +1,10 @@
+services:
+  service-1:
+    environment:
+      NATIVE_IVF_MODE: cpp
+      NATIVE_INDEX_PATH: service/index.bin
+
+  service-2:
+    environment:
+      NATIVE_IVF_MODE: cpp
+      NATIVE_INDEX_PATH: service/index.bin

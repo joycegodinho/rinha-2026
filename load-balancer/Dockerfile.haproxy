@@ -1,0 +1,6 @@
+FROM haproxy:2.9-alpine AS base
+COPY load-balancer/haproxy.cfg /usr/local/etc/haproxy/haproxy.cfg
+
+FROM base AS dev
+
+FROM base AS prod

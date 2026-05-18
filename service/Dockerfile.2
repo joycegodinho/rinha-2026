@@ -1,0 +1,25 @@
+FROM golang:1.25-alpine AS base
+WORKDIR /pps2
+EXPOSE 8086
+FROM base AS builder
+COPY . .
+COPY go.mod go.sum ./
+RUN go mod download
+# The output will be a static binary named 'main' in the /pps directory.
+RUN CGO_ENABLED=0 GOOS=linux go build -o /pps2/main ./main.go
+
+FROM base AS dev
+COPY service/go.mod service/go.sum ./
+RUN go mod download
+RUN go install github.com/air-verse/air@latest
+COPY service/ .
+ENTRYPOINT ["air", "-c", "service/.air.toml"]
+
+FROM alpine:latest AS prod
+WORKDIR /pps2
+# Copy the compiled binary from the builder stage.
+COPY --from=builder /pps2/main /main
+COPY service/index.bin.gz service/index.bin.gz
+COPY service/normalization.json service/normalization.json
+COPY service/mcc_risk.json service/mcc_risk.json
+CMD ["/main"]

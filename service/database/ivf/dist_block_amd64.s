@@ -1,0 +1,51 @@
+//go:build amd64
+
+#include "textflag.h"
+
+DATA ·distScale+0(SB)/4, $0x38d1b717
+GLOBL ·distScale(SB), RODATA, $4
+
+#define DIM16(off, qoff) \
+	VBROADCASTSS qoff(DI), Y1; \
+	VPMOVSXWD off(SI), Y0; \
+	VCVTDQ2PS Y0, Y0; \
+	VMULPS Y15, Y0, Y0; \
+	VSUBPS Y1, Y0, Y0; \
+	VFMADD231PS Y0, Y0, Y2; \
+	VPMOVSXWD off+16(SI), Y3; \
+	VCVTDQ2PS Y3, Y3; \
+	VMULPS Y15, Y3, Y3; \
+	VSUBPS Y1, Y3, Y3; \
+	VFMADD231PS Y3, Y3, Y5
+
+TEXT ·distBlockAVX2(SB), NOSPLIT, $0-32
+	MOVQ q+0(FP), DI
+	MOVQ blocks+8(FP), SI
+	MOVQ base+16(FP), AX
+	MOVQ out+24(FP), DX
+
+	LEAQ (SI)(AX*2), SI
+
+	VXORPS Y2, Y2, Y2
+	VXORPS Y5, Y5, Y5
+	VBROADCASTSS ·distScale(SB), Y15
+
+	DIM16(0, 0)
+	DIM16(32, 4)
+	DIM16(64, 8)
+	DIM16(96, 12)
+	DIM16(128, 16)
+	DIM16(160, 20)
+	DIM16(192, 24)
+	DIM16(224, 28)
+	DIM16(256, 32)
+	DIM16(288, 36)
+	DIM16(320, 40)
+	DIM16(352, 44)
+	DIM16(384, 48)
+	DIM16(416, 52)
+
+	VMOVUPS Y2, (DX)
+	VMOVUPS Y5, 32(DX)
+	VZEROUPPER
+	RET

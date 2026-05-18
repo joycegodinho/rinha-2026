@@ -1,0 +1,369 @@
+//go:build amd64
+
+package ivf
+
+import (
+	"math"
+	"os"
+	"testing"
+)
+
+func scanBlocksPureForTest(q *Vector, blocks []int16, labels []uint8, start, end int, topDist *[5]float32, topLabel *[5]uint8, worst *int) {
+	for block := start; block < end; block++ {
+		base := block * blockStride
+		var dists [vectorsPerBlock]float32
+		distBlockPure(q, blocks, base, &dists)
+		labelBase := block * vectorsPerBlock
+		for slot := 0; slot < vectorsPerBlock; slot++ {
+			dist := dists[slot]
+			if dist >= topDist[*worst] {
+				continue
+			}
+			topDist[*worst] = dist
+			topLabel[*worst] = labels[labelBase+slot]
+			wi := 0
+			wv := topDist[0]
+			for i := 1; i < 5; i++ {
+				if topDist[i] > wv {
+					wv = topDist[i]
+					wi = i
+				}
+			}
+			*worst = wi
+		}
+	}
+}
+
+func TestScanBlocksAVX2MatchesPure(t *testing.T) {
+	var q Vector
+	for i := 0; i < indexDim; i++ {
+		q[i] = float32(i-2) * 0.052
+	}
+	blocks := make([]int16, blockStride*32)
+	labels := make([]uint8, vectorsPerBlock*32)
+	for i := range blocks {
+		blocks[i] = int16((i*7919)%20000 - 10000)
+	}
+	for i := range labels {
+		labels[i] = uint8(i % 2)
+	}
+
+	gotDist := [5]float32{inf32(), inf32(), inf32(), inf32(), inf32()}
+	wantDist := gotDist
+	var gotLabel, wantLabel [5]uint8
+	gotWorst, wantWorst := 0, 0
+
+	scanBlocksAVX2(&q, &blocks[0], &labels[0], 3, 31, &gotDist, &gotLabel, &gotWorst)
+	scanBlocksPureForTest(&q, blocks, labels, 3, 31, &wantDist, &wantLabel, &wantWorst)
+
+	for i := 0; i < 5; i++ {
+		if math.Abs(float64(gotDist[i]-wantDist[i])) > 1e-5 || gotLabel[i] != wantLabel[i] {
+			t.Fatalf("slot %d: got (%f,%d), want (%f,%d)", i, gotDist[i], gotLabel[i], wantDist[i], wantLabel[i])
+		}
+	}
+	if gotWorst != wantWorst {
+		t.Fatalf("worst got %d, want %d", gotWorst, wantWorst)
+	}
+}
+
+func inf32() float32 {
+	return float32(math.Inf(1))
+}
+
+func BenchmarkScanBlocksAVX2(b *testing.B) {
+	var q Vector
+	for i := 0; i < indexDim; i++ {
+		q[i] = float32(i) * 0.031
+	}
+	blocks := make([]int16, blockStride*256)
+	labels := make([]uint8, vectorsPerBlock*256)
+	for i := range blocks {
+		blocks[i] = int16((i*1543)%20000 - 10000)
+	}
+	var topDist [5]float32
+	var topLabel [5]uint8
+	worst := 0
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < 5; j++ {
+			topDist[j] = inf32()
+		}
+		scanBlocksAVX2(&q, &blocks[0], &labels[0], 0, 256, &topDist, &topLabel, &worst)
+	}
+}
+
+func BenchmarkScanBlocksPure(b *testing.B) {
+	var q Vector
+	for i := 0; i < indexDim; i++ {
+		q[i] = float32(i) * 0.031
+	}
+	blocks := make([]int16, blockStride*256)
+	labels := make([]uint8, vectorsPerBlock*256)
+	for i := range blocks {
+		blocks[i] = int16((i*1543)%20000 - 10000)
+	}
+	var topDist [5]float32
+	var topLabel [5]uint8
+	worst := 0
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < 5; j++ {
+			topDist[j] = inf32()
+		}
+		scanBlocksPureForTest(&q, blocks, labels, 0, 256, &topDist, &topLabel, &worst)
+	}
+}
+
+func BenchmarkFraudCount5(b *testing.B) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		b.Fatal(err)
+	}
+	q := Vector{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = db.FraudCount5(&q)
+	}
+}
+
+func BenchmarkFraudCount5WithWorkspace(b *testing.B) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		b.Fatal(err)
+	}
+	q := Vector{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134}
+	var ws SearchWorkspace
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = db.FraudCount5WithWorkspace(&q, &ws)
+	}
+}
+
+func TestFraudCount5BridgeMatchesWorkspace(t *testing.T) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	queries := []Vector{
+		{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134},
+		{0.0312, 0.1111, 0.728, 0.0434, 0.2222, 0.0, 0.074, 0.023, 0.1, 0, 1, 0, 0.7, 0.001},
+		{0.8125, 0.8888, 0.183, 0.7391, 0.7777, 0.91, 0.81, 0.62, 0.9, 1, 1, 1, 0.2, 0.42},
+	}
+	for i := 0; i < 128; i++ {
+		var q Vector
+		for d := 0; d < indexDim; d++ {
+			q[d] = float32(((i+3)*(d+5))%997) / 997
+		}
+		queries = append(queries, q)
+	}
+
+	for i := range queries {
+		var bridgeWS, baseWS SearchWorkspace
+		got := db.FraudCount5Bridge(&queries[i], &bridgeWS)
+		want := db.FraudCount5WithWorkspace(&queries[i], &baseWS)
+		if got != want {
+			t.Fatalf("query %d: bridge=%d workspace=%d q=%v", i, got, want, queries[i])
+		}
+	}
+}
+
+func TestBlockBoundsMatchUnboundedBridge(t *testing.T) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(db.BlockMinRadii) == 0 || len(db.BlockMinRadii) != len(db.BlockMaxRadii) {
+		t.Fatalf("invalid block radii lengths min=%d max=%d", len(db.BlockMinRadii), len(db.BlockMaxRadii))
+	}
+
+	queries := []Vector{
+		{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134},
+		{0.0312, 0.1111, 0.728, 0.0434, 0.2222, 0.0, 0.074, 0.023, 0.1, 0, 1, 0, 0.7, 0.001},
+		{0.8125, 0.8888, 0.183, 0.7391, 0.7777, 0.91, 0.81, 0.62, 0.9, 1, 1, 1, 0.2, 0.42},
+	}
+	for i := 0; i < 512; i++ {
+		var q Vector
+		for d := 0; d < indexDim; d++ {
+			q[d] = float32(((i+11)*(d+17))%997) / 997
+		}
+		queries = append(queries, q)
+	}
+
+	minRadii := db.BlockMinRadii
+	maxRadii := db.BlockMaxRadii
+	for i := range queries {
+		var boundedWS, unboundedWS SearchWorkspace
+
+		db.BlockMinRadii = minRadii
+		db.BlockMaxRadii = maxRadii
+		got := db.FraudCount5Bridge(&queries[i], &boundedWS)
+
+		db.BlockMinRadii = nil
+		db.BlockMaxRadii = nil
+		want := db.FraudCount5Bridge(&queries[i], &unboundedWS)
+
+		if got != want {
+			t.Fatalf("query %d: bounded=%d unbounded=%d q=%v", i, got, want, queries[i])
+		}
+	}
+	db.BlockMinRadii = minRadii
+	db.BlockMaxRadii = maxRadii
+}
+
+func TestBlockBoundSkipStats(t *testing.T) {
+	if os.Getenv("IVF_BOUND_STATS") == "" {
+		t.Skip("set IVF_BOUND_STATS=1 to log block lower-bound skip stats")
+	}
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var ws SearchWorkspace
+	var skippedProbes, blocksSkipped, blocksScanned int
+	for i := 0; i < 4096; i++ {
+		var q Vector
+		for d := 0; d < indexDim; d++ {
+			q[d] = float32(((i+23)*(d+31))%997) / 997
+		}
+		centroidDists(&q, db.Centroids, db.K, &ws.CentroidDists)
+		selectTop8FromDists(db.K, &ws.Probes, &ws.CentroidDists)
+		resetTop5(&ws)
+		worst := 0
+
+		for p := 0; p < quickProbe; p++ {
+			ci := ws.Probes[p]
+			start := int(db.Offsets[ci])
+			end := int(db.Offsets[ci+1])
+			boundStart, boundEnd := db.boundProbeRange(start, end, ws.CentroidDists[ci], ws.TopDist[worst])
+			blocksSkipped += (boundStart - start) + (end - boundEnd)
+			if boundStart >= boundEnd {
+				skippedProbes++
+				continue
+			}
+			blocksScanned += boundEnd - boundStart
+			scanBlocks(&q, db.Blocks, db.Labels, boundStart, boundEnd, &ws.TopDist, &ws.TopLabel, &worst)
+		}
+	}
+	t.Logf("quick probes skipped_entirely=%d blocks_scanned=%d blocks_skipped=%d", skippedProbes, blocksScanned, blocksSkipped)
+}
+
+func BenchmarkFraudCount5Bridge(b *testing.B) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		b.Fatal(err)
+	}
+	q := Vector{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134}
+	var ws SearchWorkspace
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = db.FraudCount5Bridge(&q, &ws)
+	}
+}
+
+func BenchmarkFraudCount5BridgeBounds(b *testing.B) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		b.Fatal(err)
+	}
+	q := Vector{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134}
+	minRadii := db.BlockMinRadii
+	maxRadii := db.BlockMaxRadii
+
+	for _, tc := range []struct {
+		name string
+		min  []float32
+		max  []float32
+	}{
+		{name: "bounded", min: minRadii, max: maxRadii},
+		{name: "unbounded"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			db.BlockMinRadii = tc.min
+			db.BlockMaxRadii = tc.max
+			var ws SearchWorkspace
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = db.FraudCount5Bridge(&q, &ws)
+			}
+		})
+	}
+	db.BlockMinRadii = minRadii
+	db.BlockMaxRadii = maxRadii
+}
+
+func BenchmarkFraudCount5BridgeBoundsSpread(b *testing.B) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		b.Fatal(err)
+	}
+	queries := make([]Vector, 1024)
+	for i := range queries {
+		for d := 0; d < indexDim; d++ {
+			queries[i][d] = float32(((i+23)*(d+31))%997) / 997
+		}
+	}
+	minRadii := db.BlockMinRadii
+	maxRadii := db.BlockMaxRadii
+
+	for _, tc := range []struct {
+		name string
+		min  []float32
+		max  []float32
+	}{
+		{name: "bounded", min: minRadii, max: maxRadii},
+		{name: "unbounded"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			db.BlockMinRadii = tc.min
+			db.BlockMaxRadii = tc.max
+			var ws SearchWorkspace
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = db.FraudCount5Bridge(&queries[i&1023], &ws)
+			}
+		})
+	}
+	db.BlockMinRadii = minRadii
+	db.BlockMaxRadii = maxRadii
+}
+
+func BenchmarkFraudCount5QuickProbes(b *testing.B) {
+	db, err := LoadKMeansIndex(benchmarkIndexPath())
+	if err != nil {
+		b.Fatal(err)
+	}
+	q := Vector{0.1181, 0.3333, 0.9063, 0.2609, 0.3333, 0.0708, 0.2631, 0.1105, 0.2, 1, 0, 1, 0.3, 0.0134}
+
+	for _, quick := range []int{4, 5, 6, 8} {
+		b.Run(
+			"quick_"+string(rune('0'+quick)),
+			func(b *testing.B) {
+				var ws SearchWorkspace
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					_, _ = db.FraudCount5TraceProbes(&q, &ws, quick, 20)
+				}
+			},
+		)
+	}
+}
+
+func benchmarkIndexPath() string {
+	if path := os.Getenv("IVF_INDEX_PATH"); path != "" {
+		return path
+	}
+	return "../../index.bin.gz"
+}

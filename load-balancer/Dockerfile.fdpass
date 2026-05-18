@@ -1,0 +1,21 @@
+FROM debian:bookworm AS builder
+WORKDIR /src
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential make ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY native ./native
+
+RUN cd native && make clean && make all
+
+FROM debian:bookworm-slim AS prod
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates libstdc++6 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/native/build/fd-lb /app/fd-lb
+
+CMD ["/app/fd-lb"]

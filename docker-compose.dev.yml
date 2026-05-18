@@ -1,0 +1,90 @@
+x-base-env: &base-env
+  GC_MODE: off
+  GOGC: ${GOGC:-500}
+  GOMEMLIMIT: ${GOMEMLIMIT:-60MiB}
+  SERVICE_MODE: ${SERVICE_MODE:-}
+
+services:
+  service: &service
+    build:
+      context: .
+      target: dev
+      dockerfile: service/Dockerfile
+    environment:
+      <<: *base-env
+      SERVICE_NUMBER: 1
+      SOCKET_PATH: /sockets/service-1.sock
+      PPROF_ADDR: :6060
+    ports:
+      - "6060:6060"
+    volumes:
+      - ./:/pps/
+      - sockets-volume:/sockets
+    working_dir: /pps
+    networks:
+      - backend
+
+  service-2:
+    <<: *service
+    build:
+      context: .
+      target: dev
+      dockerfile: service/Dockerfile.2
+    environment:
+      <<: *base-env
+      SERVICE_NUMBER: 2
+      SOCKET_PATH: /sockets/service-2.sock
+      PPROF_ADDR: :6061
+    ports:
+      - "6061:6061"
+    volumes:
+      - ./:/pps2/
+      - sockets-volume:/sockets
+    working_dir: /pps2/
+    networks:
+      - backend
+
+  load-balancer:
+    image: haproxy:2.9-alpine
+    ports:
+      - "9999:9999"
+    environment:
+      - PORT=9999
+      - GC_MODE=off
+      - SOCKET1_PATH=/sockets/service-1.sock
+      - SOCKET2_PATH=/sockets/service-2.sock
+    volumes:
+      - ./load-balancer/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - sockets-volume:/sockets
+    depends_on:
+      - service
+      - service-2
+    networks:
+      - backend
+
+  warmup:
+    image: curlimages/curl:8.8.0
+    entrypoint: ["/bin/sh", "/warmup.sh"]
+    environment:
+      - BASE_URL=http://load-balancer:9999
+      - READY_RETRIES=240
+      - READY_SLEEP=0.25
+      - WARMUP_ROUNDS=48
+    volumes:
+      - ./scripts/warmup.sh:/warmup.sh:ro
+    depends_on:
+      - load-balancer
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  sockets-volume:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=4m,mode=0777
