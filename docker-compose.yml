@@ -51,10 +51,10 @@ services:
       nofile:
         soft: 65535
         hard: 65535
-      memlock:
-        soft: -1
-        hard: -1
-      core: 0
+      # memlock:
+      #   soft: -1
+      #   hard: -1
+      # core: 0
 
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.34}
@@ -108,10 +108,10 @@ services:
       nofile:
         soft: 65535
         hard: 65535
-      memlock:
-        soft: -1
-        hard: -1
-      core: 0
+      # memlock:
+      #   soft: -1
+      #   hard: -1
+      # core: 0
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.12}
@@ -150,10 +150,10 @@ services:
       nofile:
         soft: 65535
         hard: 65535
-      memlock:
-        soft: -1
-        hard: -1
-      core: 0
+      # memlock:
+      #   soft: -1
+      #   hard: -1
+      # core: 0
 
   warmup:
     image: curlimages/curl:8.8.0
