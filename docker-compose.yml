@@ -1,6 +1,6 @@
 services:
   service-1:
-    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.34}
+    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.35}
     platform: linux/amd64
     environment:
       GC_MODE: off
@@ -15,6 +15,7 @@ services:
       NATIVE_IVF_DIM_ORDER: "${NATIVE_IVF_DIM_ORDER:-}"
       NATIVE_IVF_QUICK_PROBE: "${NATIVE_IVF_QUICK_PROBE:-8}"
       NATIVE_IVF_EXPANDED_PROBE: "${NATIVE_IVF_EXPANDED_PROBE:-129}"
+      NATIVE_IVF_RESCUE5_PROBE: "${NATIVE_IVF_RESCUE5_PROBE:-96}"
       NATIVE_IVF_RESCUE_MIN: "${NATIVE_IVF_RESCUE_MIN:-2}"
       NATIVE_IVF_RESCUE_MAX: "${NATIVE_IVF_RESCUE_MAX:-5}"
       NATIVE_IVF_RESCUE2_MIN_WORST: "${NATIVE_IVF_RESCUE2_MIN_WORST:-0}"
@@ -45,7 +46,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.38"
+          cpus: "0.30"
           memory: "${SERVICE_MEMORY:-149M}"
     ulimits:
       nofile:
@@ -57,7 +58,7 @@ services:
       core: 0
 
   service-2:
-    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.34}
+    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.35}
     platform: linux/amd64
     environment:
       GC_MODE: off
@@ -72,6 +73,7 @@ services:
       NATIVE_IVF_DIM_ORDER: "${NATIVE_IVF_DIM_ORDER:-}"
       NATIVE_IVF_QUICK_PROBE: "${NATIVE_IVF_QUICK_PROBE:-8}"
       NATIVE_IVF_EXPANDED_PROBE: "${NATIVE_IVF_EXPANDED_PROBE:-129}"
+      NATIVE_IVF_RESCUE5_PROBE: "${NATIVE_IVF_RESCUE5_PROBE:-96}"
       NATIVE_IVF_RESCUE_MIN: "${NATIVE_IVF_RESCUE_MIN:-2}"
       NATIVE_IVF_RESCUE_MAX: "${NATIVE_IVF_RESCUE_MAX:-5}"
       NATIVE_IVF_RESCUE2_MIN_WORST: "${NATIVE_IVF_RESCUE2_MIN_WORST:-0}"
@@ -102,7 +104,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.38"
+          cpus: "0.30"
           memory: "${SERVICE_MEMORY:-149M}"
     ulimits:
       nofile:
@@ -144,7 +146,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.20"
+          cpus: "0.36"
           memory: "${LB_MEMORY:-40M}"
     ulimits:
       nofile:
