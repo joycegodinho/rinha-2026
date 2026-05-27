@@ -1,6 +1,6 @@
 services:
   service-1:
-    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.39-haswell}
+    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.40-haswell}
     platform: linux/amd64
     environment:
       GC_MODE: off
@@ -39,6 +39,7 @@ services:
       NATIVE_IVF_RESCORE_BOUNDS: "${NATIVE_IVF_RESCORE_BOUNDS:-1}"
       NATIVE_IVF_RESCORE_SPECIALIZED: "${NATIVE_IVF_RESCORE_SPECIALIZED:-0}"
       NATIVE_IVF_RESCORE_RADIUS_PROBES: "${NATIVE_IVF_RESCORE_RADIUS_PROBES:-0}"
+      NATIVE_IVF_RESCORE_TAIL_SELECT: "${NATIVE_IVF_RESCORE_TAIL_SELECT:-1}"
       NATIVE_CONTROL_RCVBUF: "${NATIVE_CONTROL_RCVBUF:-65536}"
       NATIVE_CONTROL_SNDBUF: "${NATIVE_CONTROL_SNDBUF:-65536}"
       NATIVE_SKIP_FD_NONBLOCKING: "${NATIVE_SKIP_FD_NONBLOCKING:-1}"
@@ -53,7 +54,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${SERVICE_CPUS:-0.35}"
+          cpus: "${SERVICE_CPUS:-0.38}"
           memory: "${SERVICE_MEMORY:-167M}"
     ulimits:
       nofile:
@@ -65,7 +66,7 @@ services:
       core: 0
 
   service-2:
-    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.39-haswell}
+    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.40-haswell}
     platform: linux/amd64
     environment:
       GC_MODE: off
@@ -104,6 +105,7 @@ services:
       NATIVE_IVF_RESCORE_BOUNDS: "${NATIVE_IVF_RESCORE_BOUNDS:-1}"
       NATIVE_IVF_RESCORE_SPECIALIZED: "${NATIVE_IVF_RESCORE_SPECIALIZED:-0}"
       NATIVE_IVF_RESCORE_RADIUS_PROBES: "${NATIVE_IVF_RESCORE_RADIUS_PROBES:-0}"
+      NATIVE_IVF_RESCORE_TAIL_SELECT: "${NATIVE_IVF_RESCORE_TAIL_SELECT:-1}"
       NATIVE_CONTROL_RCVBUF: "${NATIVE_CONTROL_RCVBUF:-65536}"
       NATIVE_CONTROL_SNDBUF: "${NATIVE_CONTROL_SNDBUF:-65536}"
       NATIVE_SKIP_FD_NONBLOCKING: "${NATIVE_SKIP_FD_NONBLOCKING:-1}"
@@ -118,7 +120,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${SERVICE_CPUS:-0.35}"
+          cpus: "${SERVICE_CPUS:-0.38}"
           memory: "${SERVICE_MEMORY:-167M}"
     ulimits:
       nofile:
@@ -160,7 +162,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${LB_CPUS:-0.26}"
+          cpus: "${LB_CPUS:-0.20}"
           memory: "${LB_MEMORY:-10M}"
     ulimits:
       nofile:
