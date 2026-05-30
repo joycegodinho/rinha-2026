@@ -1,7 +1,7 @@
 services:
   service-1:
-    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.54-haswell-countsimd}
-    # platform: linux/amd64
+    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.56-haswell-ofast}
+    platform: linux/amd64
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -59,6 +59,10 @@ services:
       NATIVE_IVF_CENTROID_PREFILTER_DIMS: "${NATIVE_IVF_CENTROID_PREFILTER_DIMS:-6}"
       NATIVE_IVF_CENTROID_PREFILTER_TARGET: "${NATIVE_IVF_CENTROID_PREFILTER_TARGET:-28}"
       NATIVE_IVF_CENTROID_DOT: "${NATIVE_IVF_CENTROID_DOT:-0}"
+      NATIVE_IVF_CENTROID_GRAPH: "${NATIVE_IVF_CENTROID_GRAPH:-0}"
+      NATIVE_IVF_CENTROID_GRAPH_NEIGHBORS: "${NATIVE_IVF_CENTROID_GRAPH_NEIGHBORS:-16}"
+      NATIVE_IVF_CENTROID_GRAPH_SEEDS: "${NATIVE_IVF_CENTROID_GRAPH_SEEDS:-8}"
+      NATIVE_IVF_CENTROID_GRAPH_MAX_PROBE: "${NATIVE_IVF_CENTROID_GRAPH_MAX_PROBE:-28}"
       NATIVE_CONTROL_RCVBUF: "${NATIVE_CONTROL_RCVBUF:-65536}"
       NATIVE_CONTROL_SNDBUF: "${NATIVE_CONTROL_SNDBUF:-65536}"
       NATIVE_SKIP_FD_NONBLOCKING: "${NATIVE_SKIP_FD_NONBLOCKING:-1}"
@@ -74,7 +78,7 @@ services:
       resources:
         limits:
           cpus: "${SERVICE_CPUS:-0.33}"
-          memory: "${SERVICE_MEMORY:-164M}"
+          memory: "${SERVICE_MEMORY:-167M}"
     ulimits:
       nofile:
         soft: 65535
@@ -82,11 +86,11 @@ services:
       memlock:
         soft: -1
         hard: -1
-      # core: 0
+      core: 0
 
   service-2:
-    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.54-haswell-countsimd}
-    # platform: linux/amd64
+    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.56-haswell-ofast}
+    platform: linux/amd64
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -144,6 +148,10 @@ services:
       NATIVE_IVF_CENTROID_PREFILTER_DIMS: "${NATIVE_IVF_CENTROID_PREFILTER_DIMS:-6}"
       NATIVE_IVF_CENTROID_PREFILTER_TARGET: "${NATIVE_IVF_CENTROID_PREFILTER_TARGET:-28}"
       NATIVE_IVF_CENTROID_DOT: "${NATIVE_IVF_CENTROID_DOT:-0}"
+      NATIVE_IVF_CENTROID_GRAPH: "${NATIVE_IVF_CENTROID_GRAPH:-0}"
+      NATIVE_IVF_CENTROID_GRAPH_NEIGHBORS: "${NATIVE_IVF_CENTROID_GRAPH_NEIGHBORS:-16}"
+      NATIVE_IVF_CENTROID_GRAPH_SEEDS: "${NATIVE_IVF_CENTROID_GRAPH_SEEDS:-8}"
+      NATIVE_IVF_CENTROID_GRAPH_MAX_PROBE: "${NATIVE_IVF_CENTROID_GRAPH_MAX_PROBE:-28}"
       NATIVE_CONTROL_RCVBUF: "${NATIVE_CONTROL_RCVBUF:-65536}"
       NATIVE_CONTROL_SNDBUF: "${NATIVE_CONTROL_SNDBUF:-65536}"
       NATIVE_SKIP_FD_NONBLOCKING: "${NATIVE_SKIP_FD_NONBLOCKING:-1}"
@@ -159,7 +167,7 @@ services:
       resources:
         limits:
           cpus: "${SERVICE_CPUS:-0.33}"
-          memory: "${SERVICE_MEMORY:-164M}"
+          memory: "${SERVICE_MEMORY:-167M}"
     ulimits:
       nofile:
         soft: 65535
@@ -167,11 +175,11 @@ services:
       memlock:
         soft: -1
         hard: -1
-      # core: 0
+      core: 0
 
   load-balancer:
-    image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.13-haswell}
-    # platform: linux/amd64
+    image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.14-haswell-ofast}
+    platform: linux/amd64
     ports:
       - "9999:9999"
     depends_on:
@@ -201,7 +209,7 @@ services:
       resources:
         limits:
           cpus: "${LB_CPUS:-0.30}"
-          memory: "${LB_MEMORY:-16M}"
+          memory: "${LB_MEMORY:-10M}"
     ulimits:
       nofile:
         soft: 65535
@@ -209,11 +217,11 @@ services:
       memlock:
         soft: -1
         hard: -1
-      # core: 0
+      core: 0
 
   warmup:
     image: curlimages/curl:8.8.0
-    # platform: linux/amd64
+    platform: linux/amd64
     entrypoint: ["/bin/sh", "/warmup.sh"]
     environment:
       - BASE_URL=http://load-balancer:9999
