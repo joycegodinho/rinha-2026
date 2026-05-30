@@ -82,7 +82,7 @@ services:
       memlock:
         soft: -1
         hard: -1
-      core: 0
+      # core: 0
 
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.52-haswell-pref28refresh}
@@ -167,7 +167,7 @@ services:
       memlock:
         soft: -1
         hard: -1
-      core: 0
+      # core: 0
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.13-haswell}
@@ -209,7 +209,7 @@ services:
       memlock:
         soft: -1
         hard: -1
-      core: 0
+      # core: 0
 
   warmup:
     image: curlimages/curl:8.8.0
