@@ -1,7 +1,9 @@
 services:
   service-1:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.52-haswell-pref28refresh}
-    platform: linux/amd64
+    # platform: linux/amd64
+    logging:
+      driver: "none"
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -86,7 +88,9 @@ services:
 
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.52-haswell-pref28refresh}
-    platform: linux/amd64
+    # platform: linux/amd64
+    logging:
+      driver: "none"
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -171,7 +175,9 @@ services:
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.13-haswell}
-    platform: linux/amd64
+    # platform: linux/amd64
+    logging:
+      driver: "none"
     ports:
       - "9999:9999"
     depends_on:
@@ -213,7 +219,9 @@ services:
 
   warmup:
     image: curlimages/curl:8.8.0
-    platform: linux/amd64
+    # platform: linux/amd64
+    logging:
+      driver: "none"
     entrypoint: ["/bin/sh", "/warmup.sh"]
     environment:
       - BASE_URL=http://load-balancer:9999
