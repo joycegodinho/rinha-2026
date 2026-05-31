@@ -86,7 +86,6 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.31}"
           memory: "${SERVICE_MEMORY:-167M}"
-    cpu_period: 10000
     ulimits:
       nofile:
         soft: 65535
@@ -183,7 +182,6 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.31}"
           memory: "${SERVICE_MEMORY:-167M}"
-    cpu_period: 10000
     ulimits:
       nofile:
         soft: 65535
@@ -226,7 +224,6 @@ services:
         limits:
           cpus: "${LB_CPUS:-0.34}"
           memory: "${LB_MEMORY:-10M}"
-    cpu_period: 10000
     ulimits:
       nofile:
         soft: 65535
@@ -261,7 +258,9 @@ services:
 networks:
   backend:
     driver: bridge
-
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "false"
 volumes:
   sockets-volume:
     driver: local
