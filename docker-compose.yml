@@ -85,7 +85,8 @@ services:
       resources:
         limits:
           cpus: "${SERVICE_CPUS:-0.31}"
-          memory: "${SERVICE_MEMORY:-159M}"
+          memory: "${SERVICE_MEMORY:-167M}"
+    cpu_period: 10000
     ulimits:
       nofile:
         soft: 65535
@@ -181,7 +182,8 @@ services:
       resources:
         limits:
           cpus: "${SERVICE_CPUS:-0.31}"
-          memory: "${SERVICE_MEMORY:-159M}"
+          memory: "${SERVICE_MEMORY:-167M}"
+    cpu_period: 10000
     ulimits:
       nofile:
         soft: 65535
@@ -223,7 +225,8 @@ services:
       resources:
         limits:
           cpus: "${LB_CPUS:-0.34}"
-          memory: "${LB_MEMORY:-20M}"
+          memory: "${LB_MEMORY:-10M}"
+    cpu_period: 10000
     ulimits:
       nofile:
         soft: 65535
@@ -252,7 +255,7 @@ services:
       resources:
         limits:
           cpus: "${WARMUP_CPUS:-0.04}"
-          memory: "${WARMUP_MEMORY:-12M}"
+          memory: "${WARMUP_MEMORY:-6M}"
     restart: "no"
 
 networks:
