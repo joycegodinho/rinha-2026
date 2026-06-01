@@ -310,8 +310,6 @@ networks:
 volumes:
   sockets-volume:
     driver: local
-    logging:
-      driver: "none"
     driver_opts:
       type: tmpfs
       device: tmpfs
