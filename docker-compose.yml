@@ -2,6 +2,7 @@ services:
   service-1:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.151-haswell-currentpolicy}
     platform: linux/amd64
+    pull_policy: always
     logging:
       driver: "none"
     environment:
@@ -80,6 +81,8 @@ services:
       NATIVE_IVF_RESIDUAL8_PREFILTER_POLICY: "${NATIVE_IVF_RESIDUAL8_PREFILTER_POLICY:-service/residual8_prefilter_policy_rate50_sk50.txt}"
       NATIVE_IVF_BINARY_PREFILTER: "${NATIVE_IVF_BINARY_PREFILTER:-0}"
       NATIVE_IVF_BINARY_PREFILTER_THRESHOLD: "${NATIVE_IVF_BINARY_PREFILTER_THRESHOLD:-4}"
+      NATIVE_IVF_BINARY_PREFILTER_PROFILE: "${NATIVE_IVF_BINARY_PREFILTER_PROFILE:-0}"
+      NATIVE_IVF_BINARY_PREFILTER_POLICY: "${NATIVE_IVF_BINARY_PREFILTER_POLICY:-}"
       NATIVE_IVF_RESCORE_SCALED: "${NATIVE_IVF_RESCORE_SCALED:-1}"
       NATIVE_IVF_RESCORE_PREFILTER_SELECT: "${NATIVE_IVF_RESCORE_PREFILTER_SELECT:-0}"
       NATIVE_IVF_RESCORE_RADIUS_PROBES: "${NATIVE_IVF_RESCORE_RADIUS_PROBES:-0}"
@@ -130,6 +133,7 @@ services:
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.151-haswell-currentpolicy}
     platform: linux/amd64
+    pull_policy: always
     logging:
       driver: "none"
     environment:
@@ -208,6 +212,8 @@ services:
       NATIVE_IVF_RESIDUAL8_PREFILTER_POLICY: "${NATIVE_IVF_RESIDUAL8_PREFILTER_POLICY:-service/residual8_prefilter_policy_rate50_sk50.txt}"
       NATIVE_IVF_BINARY_PREFILTER: "${NATIVE_IVF_BINARY_PREFILTER:-0}"
       NATIVE_IVF_BINARY_PREFILTER_THRESHOLD: "${NATIVE_IVF_BINARY_PREFILTER_THRESHOLD:-4}"
+      NATIVE_IVF_BINARY_PREFILTER_PROFILE: "${NATIVE_IVF_BINARY_PREFILTER_PROFILE:-0}"
+      NATIVE_IVF_BINARY_PREFILTER_POLICY: "${NATIVE_IVF_BINARY_PREFILTER_POLICY:-}"
       NATIVE_IVF_RESCORE_SCALED: "${NATIVE_IVF_RESCORE_SCALED:-1}"
       NATIVE_IVF_RESCORE_PREFILTER_SELECT: "${NATIVE_IVF_RESCORE_PREFILTER_SELECT:-0}"
       NATIVE_IVF_RESCORE_RADIUS_PROBES: "${NATIVE_IVF_RESCORE_RADIUS_PROBES:-0}"
@@ -243,8 +249,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${LB_CPUS:-0.36}"
-          memory: "${LB_MEMORY:-10M}"
+          cpus: "${SERVICE_CPUS:-0.30}"
+          memory: "${SERVICE_MEMORY:-167M}"
     mem_swappiness: 0
     ulimits:
       nofile:
@@ -258,13 +264,11 @@ services:
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.14-haswell-ofast}
     platform: linux/amd64
+    pull_policy: always
     logging:
       driver: "none"
     ports:
       - "9999:9999"
-    depends_on:
-      - service-1
-      - service-2
     environment:
       FD_LB_ADDR: 0.0.0.0:9999
       FD_TARGET_1: /sockets/fd-service-1.sock
@@ -286,6 +290,9 @@ services:
       - sockets-volume:/sockets
     networks:
       - backend
+    depends_on:
+      - service-1
+      - service-2
     deploy:
       resources:
         limits:
@@ -304,6 +311,7 @@ services:
   warmup:
     image: curlimages/curl:8.8.0
     platform: linux/amd64
+    pull_policy: always
     logging:
       driver: "none"
     entrypoint: ["/bin/sh", "/warmup.sh"]
@@ -323,6 +331,7 @@ services:
         limits:
           cpus: "${WARMUP_CPUS:-0.04}"
           memory: "${WARMUP_MEMORY:-6M}"
+    restart: "no"
     mem_swappiness: 0
     ulimits:
       nofile:
@@ -332,7 +341,6 @@ services:
         soft: -1
         hard: -1
       core: 0
-    restart: "no"
 
 networks:
   backend:
