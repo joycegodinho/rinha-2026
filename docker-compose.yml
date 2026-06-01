@@ -2,6 +2,8 @@ services:
   service-1:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.127-haswell-clusterbreak}
     platform: linux/amd64
+    logging:
+      driver: "none"
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -103,10 +105,13 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.30}"
           memory: "${SERVICE_MEMORY:-167M}"
+        reservations:
+          cpus: "${SERVICE_CPUS:-0.30}"
+          memory: "${SERVICE_MEMORY:-167M}"
     ulimits:
       nofile:
-        soft: 65535
-        hard: 65535
+        soft: 1048576
+        hard: 1048576
       memlock:
         soft: -1
         hard: -1
@@ -115,6 +120,8 @@ services:
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.127-haswell-clusterbreak}
     platform: linux/amd64
+    logging:
+      driver: "none"
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -216,10 +223,13 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.30}"
           memory: "${SERVICE_MEMORY:-167M}"
+        reservations:
+          cpus: "${SERVICE_CPUS:-0.30}"
+          memory: "${SERVICE_MEMORY:-167M}"
     ulimits:
       nofile:
-        soft: 65535
-        hard: 65535
+        soft: 1048576
+        hard: 1048576
       memlock:
         soft: -1
         hard: -1
@@ -228,6 +238,8 @@ services:
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.14-haswell-ofast}
     platform: linux/amd64
+    logging:
+      driver: "none"
     ports:
       - "9999:9999"
     depends_on:
@@ -258,10 +270,13 @@ services:
         limits:
           cpus: "${LB_CPUS:-0.36}"
           memory: "${LB_MEMORY:-10M}"
+      reservations:
+        cpus: "${LB_CPUS:-0.36}"
+        memory: "${LB_MEMORY:-10M}"
     ulimits:
       nofile:
-        soft: 65535
-        hard: 65535
+        soft: 1048576
+        hard: 1048576
       memlock:
         soft: -1
         hard: -1
@@ -270,6 +285,8 @@ services:
   warmup:
     image: curlimages/curl:8.8.0
     platform: linux/amd64
+    logging:
+      driver: "none"
     entrypoint: ["/bin/sh", "/warmup.sh"]
     environment:
       - BASE_URL=http://load-balancer:9999
@@ -292,12 +309,16 @@ services:
 networks:
   backend:
     driver: bridge
+    enable_ipv6: false
     driver_opts:
       com.docker.network.bridge.enable_icc: "true"
       com.docker.network.bridge.enable_ip_masquerade: "false"
+
 volumes:
   sockets-volume:
     driver: local
+    logging:
+      driver: "none"
     driver_opts:
       type: tmpfs
       device: tmpfs
