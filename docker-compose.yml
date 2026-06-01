@@ -105,6 +105,9 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.30}"
           memory: "${SERVICE_MEMORY:-167M}"
+    sysctls:
+      net.ipv4.tcp_fin_timeout: "15"
+    mem_swappiness: 0
     ulimits:
       nofile:
         soft: 1048576
@@ -220,7 +223,9 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.30}"
           memory: "${SERVICE_MEMORY:-167M}"
-
+    sysctls:
+      net.ipv4.tcp_fin_timeout: "15"
+    mem_swappiness: 0
     ulimits:
       nofile:
         soft: 1048576
@@ -265,6 +270,9 @@ services:
         limits:
           cpus: "${LB_CPUS:-0.36}"
           memory: "${LB_MEMORY:-10M}"
+    sysctls:
+      net.ipv4.tcp_fin_timeout: "15"
+    mem_swappiness: 0
     ulimits:
       nofile:
         soft: 1048576
@@ -296,6 +304,17 @@ services:
         limits:
           cpus: "${WARMUP_CPUS:-0.04}"
           memory: "${WARMUP_MEMORY:-6M}"
+    sysctls:
+      net.ipv4.tcp_fin_timeout: "15"
+    mem_swappiness: 0
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+      memlock:
+        soft: -1
+        hard: -1
+      core: 0
     restart: "no"
 
 networks:
