@@ -105,9 +105,6 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.30}"
           memory: "${SERVICE_MEMORY:-167M}"
-        reservations:
-          cpus: "${SERVICE_CPUS:-0.30}"
-          memory: "${SERVICE_MEMORY:-167M}"
     ulimits:
       nofile:
         soft: 1048576
@@ -223,9 +220,7 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.30}"
           memory: "${SERVICE_MEMORY:-167M}"
-        reservations:
-          cpus: "${SERVICE_CPUS:-0.30}"
-          memory: "${SERVICE_MEMORY:-167M}"
+
     ulimits:
       nofile:
         soft: 1048576
@@ -270,9 +265,6 @@ services:
         limits:
           cpus: "${LB_CPUS:-0.36}"
           memory: "${LB_MEMORY:-10M}"
-      reservations:
-        cpus: "${LB_CPUS:-0.36}"
-        memory: "${LB_MEMORY:-10M}"
     ulimits:
       nofile:
         soft: 1048576
@@ -313,6 +305,7 @@ networks:
     driver_opts:
       com.docker.network.bridge.enable_icc: "true"
       com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.driver.mtu: "9000"
 
 volumes:
   sockets-volume:
