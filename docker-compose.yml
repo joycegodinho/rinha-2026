@@ -1,8 +1,6 @@
 services:
   service-1:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.194-haswell-tcpselfwarm}
-    platform: linux/amd64
-    pull_policy: always
     logging:
       driver: "none"
     environment:
@@ -12,7 +10,7 @@ services:
       VECTOR_MODE: native
       NATIVE_IVF_MODE: cpp
       NATIVE_PROFILE: "${NATIVE_PROFILE:-0}"
-      NATIVE_EPOLL_SPIN_US: "${NATIVE_EPOLL_SPIN_US:-0}"
+      NATIVE_EPOLL_SPIN_US: "${NATIVE_EPOLL_SPIN_US:-50}"
       NATIVE_IVF_PROFILE_ACTUAL_SCAN: "${NATIVE_IVF_PROFILE_ACTUAL_SCAN:-0}"
       NATIVE_IVF_TRACE: "${NATIVE_IVF_TRACE:-0}"
       NATIVE_IVF_MARGIN_PROFILE: "${NATIVE_IVF_MARGIN_PROFILE:-0}"
@@ -151,7 +149,7 @@ services:
       NATIVE_IVF_MADVISE_HUGEPAGE: "${NATIVE_IVF_MADVISE_HUGEPAGE:-1}"
       NATIVE_IVF_MLOCK_INDEX: "${NATIVE_IVF_MLOCK_INDEX:-0}"
       NATIVE_IVF_TOUCH_INDEX: "${NATIVE_IVF_TOUCH_INDEX:-0}"
-      NATIVE_STARTUP_WARMUP_REQUESTS: "${NATIVE_STARTUP_WARMUP_REQUESTS:-0}"
+      NATIVE_STARTUP_WARMUP_REQUESTS: "${NATIVE_STARTUP_WARMUP_REQUESTS:-4096}"
       NATIVE_INDEX_PATH: service/index.bin
       FD_CONTROL_SOCKET: /sockets/fd-service-1.sock
     volumes:
@@ -163,21 +161,17 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.45}"
           memory: "${SERVICE_MEMORY:-167M}"
-    cpuset: "${SERVICE_1_CPUSET:-1}"
-    mem_swappiness: 0
+    cpuset: "${SERVICE_1_CPUSET:-0}"
     ulimits:
       nofile:
-        soft: 1048576
-        hard: 1048576
+        soft: 65535
+        hard: 65535
       memlock:
         soft: -1
         hard: -1
-      core: 0
 
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.194-haswell-tcpselfwarm}
-    platform: linux/amd64
-    pull_policy: always
     logging:
       driver: "none"
     environment:
@@ -187,7 +181,7 @@ services:
       VECTOR_MODE: native
       NATIVE_IVF_MODE: cpp
       NATIVE_PROFILE: "${NATIVE_PROFILE:-0}"
-      NATIVE_EPOLL_SPIN_US: "${NATIVE_EPOLL_SPIN_US:-0}"
+      NATIVE_EPOLL_SPIN_US: "${NATIVE_EPOLL_SPIN_US:-50}"
       NATIVE_IVF_PROFILE_ACTUAL_SCAN: "${NATIVE_IVF_PROFILE_ACTUAL_SCAN:-0}"
       NATIVE_IVF_TRACE: "${NATIVE_IVF_TRACE:-0}"
       NATIVE_IVF_MARGIN_PROFILE: "${NATIVE_IVF_MARGIN_PROFILE:-0}"
@@ -326,7 +320,7 @@ services:
       NATIVE_IVF_MADVISE_HUGEPAGE: "${NATIVE_IVF_MADVISE_HUGEPAGE:-1}"
       NATIVE_IVF_MLOCK_INDEX: "${NATIVE_IVF_MLOCK_INDEX:-0}"
       NATIVE_IVF_TOUCH_INDEX: "${NATIVE_IVF_TOUCH_INDEX:-0}"
-      NATIVE_STARTUP_WARMUP_REQUESTS: "${NATIVE_STARTUP_WARMUP_REQUESTS:-0}"
+      NATIVE_STARTUP_WARMUP_REQUESTS: "${NATIVE_STARTUP_WARMUP_REQUESTS:-4096}"
       NATIVE_INDEX_PATH: service/index.bin
       FD_CONTROL_SOCKET: /sockets/fd-service-2.sock
     volumes:
@@ -338,21 +332,17 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.45}"
           memory: "${SERVICE_MEMORY:-167M}"
-    mem_swappiness: 0
-    cpuset: "${SERVICE_2_CPUSET:-2}"
+    cpuset: "${SERVICE_2_CPUSET:-1}"
     ulimits:
       nofile:
-        soft: 1048576
-        hard: 1048576
+        soft: 65535
+        hard: 65535
       memlock:
         soft: -1
         hard: -1
-      core: 0
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.14-haswell-ofast}
-    platform: linux/amd64
-    pull_policy: always
     logging:
       driver: "none"
     ports:
@@ -374,8 +364,8 @@ services:
       FD_LB_CONTROL_SNDBUF: "${FD_LB_CONTROL_SNDBUF:-65536}"
       FD_LB_SET_ACCEPT_NODELAY: "${FD_LB_SET_ACCEPT_NODELAY:-0}"
       FD_LB_BLOCKING_ACCEPT: "${FD_LB_BLOCKING_ACCEPT:-0}"
-      FD_LB_FD_BATCH: "${FD_LB_FD_BATCH:-1}"
-      FD_LB_SELF_WARM_REQUESTS: "${FD_LB_SELF_WARM_REQUESTS:-0}"
+      FD_LB_FD_BATCH: "${FD_LB_FD_BATCH:-16}"
+      FD_LB_SELF_WARM_REQUESTS: "${FD_LB_SELF_WARM_REQUESTS:-128}"
       FD_LB_SELF_WARM_DELAY_MS: "${FD_LB_SELF_WARM_DELAY_MS:-20}"
       FD_LB_SOCKET_BUSY_POLL_US: "${FD_LB_SOCKET_BUSY_POLL_US:-0}"
       FD_LB_SOCKET_BUSY_POLL_BUDGET: "${FD_LB_SOCKET_BUSY_POLL_BUDGET:-8}"
@@ -395,16 +385,11 @@ services:
         limits:
           cpus: "${LB_CPUS:-0.10}"
           memory: "${LB_MEMORY:-10M}"
-    mem_swappiness: 0
-    cpuset: "${LB_CPUSET:-3}"
+    cpuset: "${LB_CPUSET:-2,3}"
     ulimits:
       nofile:
-        soft: 1048576
-        hard: 1048576
-      memlock:
-        soft: -1
-        hard: -1
-      core: 0
+        soft: 65535
+        hard: 65535
 
 networks:
   backend:
