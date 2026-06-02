@@ -1,7 +1,7 @@
 services:
   service-1:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.194-haswell-tcpselfwarm}
-    cpuset: "0"
+    cpuset: "2"
     logging:
       driver: "none"
     environment:
@@ -344,7 +344,7 @@ services:
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.14-haswell-ofast}
-    cpuset: "2,3"
+    cpuset: "0,3"
     logging:
       driver: "none"
     ports:
