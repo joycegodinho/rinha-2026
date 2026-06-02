@@ -156,12 +156,11 @@ services:
       FD_CONTROL_SOCKET: /sockets/fd-service-1.sock
     volumes:
       - sockets-volume:/sockets
-    networks:
-      - backend
+    network_mode: "none"
     deploy:
       resources:
         limits:
-          cpus: "${SERVICE_CPUS:-0.36}"
+          cpus: "${SERVICE_CPUS:-0.40}"
           memory: "${SERVICE_MEMORY:-167M}"
     cpuset: "${SERVICE_1_CPUSET:-0}"
     mem_swappiness: 0
@@ -172,7 +171,7 @@ services:
       memlock:
         soft: -1
         hard: -1
-      # core: 0
+      core: 0
 
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.194-haswell-tcpselfwarm}
@@ -331,12 +330,11 @@ services:
       FD_CONTROL_SOCKET: /sockets/fd-service-2.sock
     volumes:
       - sockets-volume:/sockets
-    networks:
-      - backend
+    network_mode: "none"
     deploy:
       resources:
         limits:
-          cpus: "${SERVICE_CPUS:-0.36}"
+          cpus: "${SERVICE_CPUS:-0.40}"
           memory: "${SERVICE_MEMORY:-167M}"
     mem_swappiness: 0
     cpuset: "${SERVICE_2_CPUSET:-1}"
@@ -347,7 +345,7 @@ services:
       memlock:
         soft: -1
         hard: -1
-      # core: 0
+      core: 0
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.14-haswell-ofast}
@@ -393,7 +391,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${LB_CPUS:-0.25}"
+          cpus: "${LB_CPUS:-0.19}"
           memory: "${LB_MEMORY:-10M}"
     mem_swappiness: 0
     cpuset: "${LB_CPUSET:-2,3}"
@@ -404,7 +402,7 @@ services:
       memlock:
         soft: -1
         hard: -1
-      # core: 0
+      core: 0
 
   warmup:
     image: curlimages/curl:8.8.0
@@ -427,7 +425,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${WARMUP_CPUS:-0.03}"
+          cpus: "${WARMUP_CPUS:-0.01}"
           memory: "${WARMUP_MEMORY:-6M}"
     restart: "no"
     mem_swappiness: 0
@@ -439,7 +437,7 @@ services:
       memlock:
         soft: -1
         hard: -1
-      # core: 0
+      core: 0
 
 networks:
   backend:
