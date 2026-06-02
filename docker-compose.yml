@@ -132,7 +132,7 @@ services:
       NATIVE_FAST_PATH_LEGIT: "${NATIVE_FAST_PATH_LEGIT:-1}"
       NATIVE_FAST_PATH_FRAUD: "${NATIVE_FAST_PATH_FRAUD:-1}"
       NATIVE_TIER_PATH: "${NATIVE_TIER_PATH:-1}"
-      NATIVE_MLOCKALL: "${NATIVE_MLOCKALL:-1}"
+      NATIVE_MLOCKALL: "${NATIVE_MLOCKALL:-0}"
       NATIVE_TIMER_SLACK_NS: "${NATIVE_TIMER_SLACK_NS:-0}"
       NATIVE_TCP_WORKERS: "${NATIVE_TCP_WORKERS:-1}"
       NATIVE_TCP_DEFER_ACCEPT_SECONDS: "${NATIVE_TCP_DEFER_ACCEPT_SECONDS:-1}"
@@ -151,7 +151,7 @@ services:
       NATIVE_IVF_MADVISE_HUGEPAGE: "${NATIVE_IVF_MADVISE_HUGEPAGE:-1}"
       NATIVE_IVF_MLOCK_INDEX: "${NATIVE_IVF_MLOCK_INDEX:-0}"
       NATIVE_IVF_TOUCH_INDEX: "${NATIVE_IVF_TOUCH_INDEX:-0}"
-      NATIVE_STARTUP_WARMUP_REQUESTS: "${NATIVE_STARTUP_WARMUP_REQUESTS:-4096}"
+      NATIVE_STARTUP_WARMUP_REQUESTS: "${NATIVE_STARTUP_WARMUP_REQUESTS:-0}"
       NATIVE_INDEX_PATH: service/index.bin
       FD_CONTROL_SOCKET: /sockets/fd-service-1.sock
     volumes:
@@ -161,7 +161,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${SERVICE_CPUS:-0.38}"
+          cpus: "${SERVICE_CPUS:-0.45}"
           memory: "${SERVICE_MEMORY:-167M}"
     cpuset: "${SERVICE_1_CPUSET:-0}"
     mem_swappiness: 0
@@ -307,7 +307,7 @@ services:
       NATIVE_FAST_PATH_LEGIT: "${NATIVE_FAST_PATH_LEGIT:-1}"
       NATIVE_FAST_PATH_FRAUD: "${NATIVE_FAST_PATH_FRAUD:-1}"
       NATIVE_TIER_PATH: "${NATIVE_TIER_PATH:-1}"
-      NATIVE_MLOCKALL: "${NATIVE_MLOCKALL:-1}"
+      NATIVE_MLOCKALL: "${NATIVE_MLOCKALL:-0}"
       NATIVE_TIMER_SLACK_NS: "${NATIVE_TIMER_SLACK_NS:-0}"
       NATIVE_TCP_WORKERS: "${NATIVE_TCP_WORKERS:-1}"
       NATIVE_TCP_DEFER_ACCEPT_SECONDS: "${NATIVE_TCP_DEFER_ACCEPT_SECONDS:-1}"
@@ -326,20 +326,19 @@ services:
       NATIVE_IVF_MADVISE_HUGEPAGE: "${NATIVE_IVF_MADVISE_HUGEPAGE:-1}"
       NATIVE_IVF_MLOCK_INDEX: "${NATIVE_IVF_MLOCK_INDEX:-0}"
       NATIVE_IVF_TOUCH_INDEX: "${NATIVE_IVF_TOUCH_INDEX:-0}"
-      NATIVE_STARTUP_WARMUP_REQUESTS: "${NATIVE_STARTUP_WARMUP_REQUESTS:-4096}"
+      NATIVE_STARTUP_WARMUP_REQUESTS: "${NATIVE_STARTUP_WARMUP_REQUESTS:-0}"
       NATIVE_INDEX_PATH: service/index.bin
       FD_CONTROL_SOCKET: /sockets/fd-service-2.sock
     volumes:
       - sockets-volume:/sockets
-    networks:
-      - backend
+    network_mode: "none"
     deploy:
       resources:
         limits:
-          cpus: "${SERVICE_CPUS:-0.38}"
+          cpus: "${SERVICE_CPUS:-0.45}"
           memory: "${SERVICE_MEMORY:-167M}"
     mem_swappiness: 0
-    cpuset: "${SERVICE_2_CPUSET:-2}"
+    cpuset: "${SERVICE_2_CPUSET:-1}"
     ulimits:
       nofile:
         soft: 1048576
@@ -393,45 +392,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${LB_CPUS:-0.20}"
+          cpus: "${LB_CPUS:-0.10}"
           memory: "${LB_MEMORY:-10M}"
     mem_swappiness: 0
-    cpuset: "${LB_CPUSET:-1,3}"
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-      memlock:
-        soft: -1
-        hard: -1
-      core: 0
-
-  warmup:
-    image: curlimages/curl:8.8.0
-    platform: linux/amd64
-    pull_policy: always
-    logging:
-      driver: "none"
-    entrypoint: ["/bin/sh", "/warmup.sh"]
-    environment:
-      - BASE_URL=http://load-balancer:9999
-      - READY_RETRIES=240
-      - READY_SLEEP=0.25
-      - WARMUP_ROUNDS=8
-    volumes:
-      - ./scripts/warmup.sh:/warmup.sh:ro
-    depends_on:
-      - load-balancer
-    networks:
-      - backend
-    deploy:
-      resources:
-        limits:
-          cpus: "${WARMUP_CPUS:-0.04}"
-          memory: "${WARMUP_MEMORY:-6M}"
-    restart: "no"
-    mem_swappiness: 0
-    cpuset: "${WARMUP_CPUSET:-3}"
+    cpuset: "${LB_CPUSET:-2,3}"
     ulimits:
       nofile:
         soft: 1048576
