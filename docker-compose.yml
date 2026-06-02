@@ -1,6 +1,7 @@
 services:
   service-1:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.194-haswell-tcpselfwarm}
+    cpuset: "0"
     logging:
       driver: "none"
     environment:
@@ -156,12 +157,6 @@ services:
       - sockets-volume:/sockets
     networks:
       - backend
-    deploy:
-      resources:
-        limits:
-          cpus: "${SERVICE_CPUS:-0.45}"
-          memory: "${SERVICE_MEMORY:-167M}"
-    cpuset: "${SERVICE_1_CPUSET:-0}"
     ulimits:
       nofile:
         soft: 65535
@@ -169,9 +164,15 @@ services:
       memlock:
         soft: -1
         hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "${SERVICE_CPUS:-0.45}"
+          memory: "${SERVICE_MEMORY:-167M}"
 
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.194-haswell-tcpselfwarm}
+    cpuset: "1"
     logging:
       driver: "none"
     environment:
@@ -327,12 +328,6 @@ services:
       - sockets-volume:/sockets
     networks:
       - backend
-    deploy:
-      resources:
-        limits:
-          cpus: "${SERVICE_CPUS:-0.45}"
-          memory: "${SERVICE_MEMORY:-167M}"
-    cpuset: "${SERVICE_2_CPUSET:-1}"
     ulimits:
       nofile:
         soft: 65535
@@ -340,9 +335,16 @@ services:
       memlock:
         soft: -1
         hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "${SERVICE_CPUS:-0.45}"
+          memory: "${SERVICE_MEMORY:-167M}"
+
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.14-haswell-ofast}
+    cpuset: "2,3"
     logging:
       driver: "none"
     ports:
@@ -380,16 +382,16 @@ services:
     depends_on:
       - service-1
       - service-2
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     deploy:
       resources:
         limits:
           cpus: "${LB_CPUS:-0.10}"
           memory: "${LB_MEMORY:-10M}"
-    cpuset: "${LB_CPUSET:-2,3}"
-    ulimits:
-      nofile:
-        soft: 65535
-        hard: 65535
+
 
 networks:
   backend:
@@ -401,4 +403,4 @@ volumes:
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: size=10m
+      o: "size=4m,uid=0,gid=0,mode=0777"
