@@ -163,7 +163,7 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.45}"
           memory: "${SERVICE_MEMORY:-167M}"
-    cpuset: "${SERVICE_1_CPUSET:-0}"
+    cpuset: "${SERVICE_1_CPUSET:-1}"
     mem_swappiness: 0
     ulimits:
       nofile:
@@ -331,14 +331,15 @@ services:
       FD_CONTROL_SOCKET: /sockets/fd-service-2.sock
     volumes:
       - sockets-volume:/sockets
-    network_mode: "none"
+    networks:
+      - backend
     deploy:
       resources:
         limits:
           cpus: "${SERVICE_CPUS:-0.45}"
           memory: "${SERVICE_MEMORY:-167M}"
     mem_swappiness: 0
-    cpuset: "${SERVICE_2_CPUSET:-1}"
+    cpuset: "${SERVICE_2_CPUSET:-2}"
     ulimits:
       nofile:
         soft: 1048576
@@ -395,7 +396,7 @@ services:
           cpus: "${LB_CPUS:-0.10}"
           memory: "${LB_MEMORY:-10M}"
     mem_swappiness: 0
-    cpuset: "${LB_CPUSET:-2,3}"
+    cpuset: "${LB_CPUSET:-3}"
     ulimits:
       nofile:
         soft: 1048576
