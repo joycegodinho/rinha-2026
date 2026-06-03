@@ -413,7 +413,7 @@ services:
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.21-haswell-channels8}
-    cpuset: "${LB_CPUSET:-3}"
+    cpuset: "${LB_CPUSET:-2,3}"
     logging:
       driver: "none"
     ports:
