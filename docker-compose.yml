@@ -1,9 +1,9 @@
 services:
   service-1:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.201-haswell-channels8}
+    cpuset: "${SERVICE_1_CPUSET:-0}"
     logging:
       driver: "none"
-    cpuset: "0"
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -130,8 +130,9 @@ services:
       NATIVE_CONTROL_SNDBUF: "${NATIVE_CONTROL_SNDBUF:-65536}"
       NATIVE_CONTROL_SEQPACKET: "${NATIVE_CONTROL_SEQPACKET:-0}"
       NATIVE_CONTROL_RECV_DONTWAIT: "${NATIVE_CONTROL_RECV_DONTWAIT:-1}"
-      NATIVE_CONTROL_RECV_CMSG_CLOEXEC: "${NATIVE_CONTROL_RECV_CMSG_CLOEXEC:-0}"
+      NATIVE_CONTROL_RECV_CMSG_CLOEXEC: "${NATIVE_CONTROL_RECV_CMSG_CLOEXEC:-1}"
       NATIVE_CONTROL_LOOP_WARN: "${NATIVE_CONTROL_LOOP_WARN:-0}"
+      NATIVE_EPOLL_INTEREST_CACHE: "${NATIVE_EPOLL_INTEREST_CACHE:-0}"
       NATIVE_SKIP_FD_NONBLOCKING: "${NATIVE_SKIP_FD_NONBLOCKING:-1}"
       NATIVE_AGGRESSIVE_COMPACT: "${NATIVE_AGGRESSIVE_COMPACT:-1}"
       NATIVE_FRAGMENT_PROFILE: "${NATIVE_FRAGMENT_PROFILE:-0}"
@@ -200,12 +201,15 @@ services:
       nofile:
         soft: 65535
         hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
 
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.201-haswell-channels8}
+    cpuset: "${SERVICE_2_CPUSET:-1}"
     logging:
       driver: "none"
-    cpuset: "1"
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -332,8 +336,9 @@ services:
       NATIVE_CONTROL_SNDBUF: "${NATIVE_CONTROL_SNDBUF:-65536}"
       NATIVE_CONTROL_SEQPACKET: "${NATIVE_CONTROL_SEQPACKET:-0}"
       NATIVE_CONTROL_RECV_DONTWAIT: "${NATIVE_CONTROL_RECV_DONTWAIT:-1}"
-      NATIVE_CONTROL_RECV_CMSG_CLOEXEC: "${NATIVE_CONTROL_RECV_CMSG_CLOEXEC:-0}"
+      NATIVE_CONTROL_RECV_CMSG_CLOEXEC: "${NATIVE_CONTROL_RECV_CMSG_CLOEXEC:-1}"
       NATIVE_CONTROL_LOOP_WARN: "${NATIVE_CONTROL_LOOP_WARN:-0}"
+      NATIVE_EPOLL_INTEREST_CACHE: "${NATIVE_EPOLL_INTEREST_CACHE:-0}"
       NATIVE_SKIP_FD_NONBLOCKING: "${NATIVE_SKIP_FD_NONBLOCKING:-1}"
       NATIVE_AGGRESSIVE_COMPACT: "${NATIVE_AGGRESSIVE_COMPACT:-1}"
       NATIVE_FRAGMENT_PROFILE: "${NATIVE_FRAGMENT_PROFILE:-0}"
@@ -402,9 +407,13 @@ services:
       nofile:
         soft: 65535
         hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.21-haswell-channels8}
+    cpuset: "${LB_CPUSET:-3}"
     logging:
       driver: "none"
     ports:
@@ -413,9 +422,10 @@ services:
       FD_LB_ADDR: 0.0.0.0:9999
       FD_TARGET_1: /sockets/fd-service-1.sock
       FD_TARGET_2: /sockets/fd-service-2.sock
-      FD_LB_WORKERS: "1"
-      FD_LB_REUSEPORT: "0"
-      FD_LB_LOCAL_RR: "0"
+      FD_LB_WORKERS: "${FD_LB_WORKERS:-1}"
+      FD_LB_REUSEPORT: "${FD_LB_REUSEPORT:-0}"
+      FD_LB_LOCAL_RR: "${FD_LB_LOCAL_RR:-0}"
+      FD_LB_PIN_WORKERS: "${FD_LB_PIN_WORKERS:-0}"
       FD_LB_DEFER_ACCEPT_SECONDS: "1"
       FD_LB_CONNECT_RETRIES: "3000"
       FD_LB_RECONNECT_RETRIES: "3"
@@ -480,11 +490,6 @@ services:
 networks:
   backend:
     driver: bridge
-    enable_ipv6: false
-    driver_opts:
-      com.docker.network.bridge.enable_icc: "true"
-      com.docker.network.bridge.enable_ip_masquerade: "false"
-      com.docker.network.driver.mtu: "9000"
 
 volumes:
   sockets-volume:
