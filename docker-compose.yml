@@ -1,6 +1,6 @@
 services:
   service-1:
-    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.200-haswell-tree-approval-unknown-m005}
+    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.201-haswell-channels8}
     logging:
       driver: "none"
     environment:
@@ -140,6 +140,7 @@ services:
       NATIVE_FD_TCP_QUICKACK: "${NATIVE_FD_TCP_QUICKACK:-1}"
       NATIVE_FD_INITIAL_READ_SPINS: "${NATIVE_FD_INITIAL_READ_SPINS:-16}"
       NATIVE_POST_FLUSH_READ_SPINS: "${NATIVE_POST_FLUSH_READ_SPINS:-0}"
+      NATIVE_FD_CONTROL_CONNECTIONS: "${NATIVE_FD_CONTROL_CONNECTIONS:-8}"
       NATIVE_FD_CONTROL_SINGLE_RECV: "${NATIVE_FD_CONTROL_SINGLE_RECV:-0}"
       NATIVE_FD_CLIENT_LEVEL_TRIGGER: "${NATIVE_FD_CLIENT_LEVEL_TRIGGER:-0}"
       NATIVE_FD_DIRECT_SLOTS: "${NATIVE_FD_DIRECT_SLOTS:-0}"
@@ -191,7 +192,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${SERVICE_CPUS:-0.38}"
+          cpus: "${SERVICE_CPUS:-0.36}"
           memory: "${SERVICE_MEMORY:-164M}"
     ulimits:
       nofile:
@@ -202,7 +203,7 @@ services:
         hard: -1
 
   service-2:
-    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.200-haswell-tree-approval-unknown-m005}
+    image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.201-haswell-channels8}
     logging:
       driver: "none"
     environment:
@@ -342,6 +343,7 @@ services:
       NATIVE_FD_TCP_QUICKACK: "${NATIVE_FD_TCP_QUICKACK:-1}"
       NATIVE_FD_INITIAL_READ_SPINS: "${NATIVE_FD_INITIAL_READ_SPINS:-16}"
       NATIVE_POST_FLUSH_READ_SPINS: "${NATIVE_POST_FLUSH_READ_SPINS:-0}"
+      NATIVE_FD_CONTROL_CONNECTIONS: "${NATIVE_FD_CONTROL_CONNECTIONS:-8}"
       NATIVE_FD_CONTROL_SINGLE_RECV: "${NATIVE_FD_CONTROL_SINGLE_RECV:-0}"
       NATIVE_FD_CLIENT_LEVEL_TRIGGER: "${NATIVE_FD_CLIENT_LEVEL_TRIGGER:-0}"
       NATIVE_FD_DIRECT_SLOTS: "${NATIVE_FD_DIRECT_SLOTS:-0}"
@@ -393,7 +395,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${SERVICE_CPUS:-0.38}"
+          cpus: "${SERVICE_CPUS:-0.36}"
           memory: "${SERVICE_MEMORY:-164M}"
     ulimits:
       nofile:
@@ -404,7 +406,7 @@ services:
         hard: -1
 
   load-balancer:
-    image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.14-haswell-ofast}
+    image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.21-haswell-channels8}
     logging:
       driver: "none"
     ports:
@@ -436,6 +438,7 @@ services:
       FD_LB_TIMER_SLACK_NS: "${FD_LB_TIMER_SLACK_NS:-0}"
       FD_LB_TCP_FASTOPEN: "${FD_LB_TCP_FASTOPEN:-0}"
       FD_LB_CONTROL_DONTWAIT: "${FD_LB_CONTROL_DONTWAIT:-0}"
+      FD_LB_CHANNELS_PER_TARGET: "${FD_LB_CHANNELS_PER_TARGET:-8}"
       FD_LB_PROFILE: "${FD_LB_PROFILE:-0}"
     volumes:
       - sockets-volume:/sockets
@@ -447,7 +450,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${LB_CPUS:-0.2}"
+          cpus: "${LB_CPUS:-0.24}"
           memory: "${LB_MEMORY:-10M}"
     ulimits:
       nofile:
