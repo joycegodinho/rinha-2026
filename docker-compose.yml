@@ -3,6 +3,7 @@ services:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.201-haswell-channels8}
     logging:
       driver: "none"
+    cpuset: "0"
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -207,6 +208,7 @@ services:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.201-haswell-channels8}
     logging:
       driver: "none"
+    cpuset: "1"
     environment:
       GC_MODE: off
       GOGC: "500"
@@ -411,7 +413,6 @@ services:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.21-haswell-channels8}
     logging:
       driver: "none"
-    cpuset: "3"
     ports:
       - "9999:9999"
     environment:
