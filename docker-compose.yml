@@ -412,7 +412,7 @@ services:
         hard: -1
 
   load-balancer:
-    image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.21-haswell-channels8}
+    image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:pin-workers-channels-20260603}
     cpuset: "${LB_CPUSET:-2,3}"
     logging:
       driver: "none"
@@ -422,10 +422,10 @@ services:
       FD_LB_ADDR: 0.0.0.0:9999
       FD_TARGET_1: /sockets/fd-service-1.sock
       FD_TARGET_2: /sockets/fd-service-2.sock
-      FD_LB_WORKERS: "${FD_LB_WORKERS:-1}"
-      FD_LB_REUSEPORT: "${FD_LB_REUSEPORT:-0}"
-      FD_LB_LOCAL_RR: "${FD_LB_LOCAL_RR:-0}"
-      FD_LB_PIN_WORKERS: "${FD_LB_PIN_WORKERS:-0}"
+      FD_LB_WORKERS: "${FD_LB_WORKERS:-2}"
+      FD_LB_REUSEPORT: "${FD_LB_REUSEPORT:-1}"
+      FD_LB_LOCAL_RR: "${FD_LB_LOCAL_RR:-1}"
+      FD_LB_PIN_WORKERS: "${FD_LB_PIN_WORKERS:-1}"
       FD_LB_DEFER_ACCEPT_SECONDS: "1"
       FD_LB_CONNECT_RETRIES: "3000"
       FD_LB_RECONNECT_RETRIES: "3"
