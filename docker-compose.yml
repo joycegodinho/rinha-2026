@@ -196,13 +196,15 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.36}"
           memory: "${SERVICE_MEMORY:-164M}"
+    mem_swappiness: 0
     ulimits:
       nofile:
-        soft: 65535
-        hard: 65535
+        soft: 1048576
+        hard: 1048576
       memlock:
         soft: -1
         hard: -1
+      core: 0
 
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.201-haswell-channels8}
@@ -401,13 +403,15 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-0.36}"
           memory: "${SERVICE_MEMORY:-164M}"
+    mem_swappiness: 0
     ulimits:
       nofile:
-        soft: 65535
-        hard: 65535
+        soft: 1048576
+        hard: 1048576
       memlock:
         soft: -1
         hard: -1
+      core: 0
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.21-haswell-channels8}
@@ -456,10 +460,15 @@ services:
         limits:
           cpus: "${LB_CPUS:-0.24}"
           memory: "${LB_MEMORY:-10M}"
+    mem_swappiness: 0
     ulimits:
       nofile:
-        soft: 65535
-        hard: 65535
+        soft: 1048576
+        hard: 1048576
+      memlock:
+        soft: -1
+        hard: -1
+      core: 0
 
   warmup:
     image: curlimages/curl:8.8.0
@@ -486,6 +495,11 @@ services:
 networks:
   backend:
     driver: bridge
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.driver.mtu: "9000"
 
 volumes:
   sockets-volume:
