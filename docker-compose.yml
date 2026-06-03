@@ -409,6 +409,7 @@ services:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.21-haswell-channels8}
     logging:
       driver: "none"
+    cpuset: "2,3"
     ports:
       - "9999:9999"
     environment:
