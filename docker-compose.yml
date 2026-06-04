@@ -2,6 +2,7 @@ services:
   service-1:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.202-kdpolicy}
     cpuset: "${SERVICE_1_CPUSET:-0}"
+    pull_policy: "always"
     logging:
       driver: "none"
     environment:
@@ -215,6 +216,7 @@ services:
   service-2:
     image: ${API_IMAGE:-joycegodinhoo/rinha-2026-api:v0.2.202-kdpolicy}
     cpuset: "${SERVICE_2_CPUSET:-1}"
+    pull_policy: "always"
     logging:
       driver: "none"
     environment:
@@ -427,7 +429,8 @@ services:
 
   load-balancer:
     image: ${LB_IMAGE:-joycegodinhoo/rinha-2026-lb:v0.2.21-haswell-channels8}
-    cpuset: "${LB_CPUSET:-2,3}"
+    # cpuset: "${LB_CPUSET:-2,3}"
+    pull_policy: "always"
     logging:
       driver: "none"
     ports:
