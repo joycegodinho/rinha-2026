@@ -4,8 +4,13 @@ BUILD_DIR := build
 SERVER := $(BUILD_DIR)/fd-lb
 SRCS := fd_lb.cpp
 
-CXXFLAGS ?= -O3 -DNDEBUG -std=c++20 -march=x86-64-v3 -mtune=native -fno-exceptions -fno-rtti -pthread
-LDFLAGS ?= -pthread
+CXX_OPT ?= -Ofast
+CXX_MARCH ?= haswell
+CXX_TUNE ?= haswell
+CXX_EXTRA ?= -fomit-frame-pointer -flto
+LDFLAGS_EXTRA ?= -flto
+CXXFLAGS ?= $(CXX_OPT) -DNDEBUG -std=c++20 -march=$(CXX_MARCH) -mtune=$(CXX_TUNE) -fno-exceptions -fno-rtti -pthread $(CXX_EXTRA)
+LDFLAGS ?= -pthread $(LDFLAGS_EXTRA)
 
 .PHONY: all clean
 

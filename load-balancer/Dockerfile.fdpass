@@ -1,13 +1,19 @@
 FROM debian:bookworm AS builder
 WORKDIR /src
 
+ARG CXX_OPT=-Ofast
+ARG CXX_MARCH=haswell
+ARG CXX_TUNE=haswell
+ARG CXX_EXTRA=-fomit-frame-pointer -flto
+ARG LDFLAGS_EXTRA=-flto
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential make ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 COPY native ./native
 
-RUN cd native && make clean && make all
+RUN cd native && make clean && make CXX_OPT="${CXX_OPT}" CXX_MARCH="${CXX_MARCH}" CXX_TUNE="${CXX_TUNE}" CXX_EXTRA="${CXX_EXTRA}" LDFLAGS_EXTRA="${LDFLAGS_EXTRA}" all
 
 FROM debian:bookworm-slim AS prod
 WORKDIR /app
