@@ -3,6 +3,13 @@ WORKDIR /src
 
 ARG GOAMD64=v3
 ARG PURE_CPP=1
+ARG INDEX_GZ=index.bin.gz
+ARG CXX_OPT=-Ofast
+ARG CXX_MARCH=haswell
+ARG CXX_TUNE=haswell
+ARG CXX_EXTRA=-fomit-frame-pointer -flto
+ARG LDFLAGS_EXTRA=-flto
+ARG LOCAL_FRAUD_GRAPH_WINDOW=0
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential make ca-certificates && \
@@ -15,13 +22,19 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 COPY . .
 
-RUN gzip -dc index.bin.gz > /tmp/index.bin
+RUN gzip -dc "${INDEX_GZ}" > /tmp/index.bin && \
+    cp "${INDEX_GZ}" /tmp/index.bin.gz
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go run ./cmd/build_local_fraud_graph /tmp/index.bin /tmp/local_fraud_graph.bin "${LOCAL_FRAUD_GRAPH_WINDOW}" || \
+    (echo "local fraud graph sidecar unavailable for ${INDEX_GZ}" >&2 && : > /tmp/local_fraud_graph.bin)
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd native && \
     make clean && \
-    make GOAMD64=${GOAMD64} PURE_CPP=${PURE_CPP} all
+    make GOAMD64="${GOAMD64}" PURE_CPP="${PURE_CPP}" CXX_OPT="${CXX_OPT}" CXX_MARCH="${CXX_MARCH}" CXX_TUNE="${CXX_TUNE}" CXX_EXTRA="${CXX_EXTRA}" LDFLAGS_EXTRA="${LDFLAGS_EXTRA}" all
 
 FROM debian:bookworm-slim AS prod
 WORKDIR /app
@@ -32,7 +45,27 @@ RUN apt-get update && \
 
 COPY --from=builder /src/native/build/native-server /app/native-server
 COPY --from=builder /tmp/index.bin /app/service/index.bin
-COPY index.bin.gz /app/service/index.bin.gz
+COPY --from=builder /tmp/index.bin.gz /app/service/index.bin.gz
+COPY --from=builder /tmp/local_fraud_graph.bin /app/service/local_fraud_graph.bin
+COPY centroid_rescore_skip_policy.txt /app/service/centroid_rescore_skip_policy.txt
+COPY centroid_rescore_skip_policy_aggressive.txt /app/service/centroid_rescore_skip_policy_aggressive.txt
+COPY centroid_rescore_skip_policy_current_safe1.txt /app/service/centroid_rescore_skip_policy_current_safe1.txt
+COPY centroid_rescore_skip_policy_current_safe2.txt /app/service/centroid_rescore_skip_policy_current_safe2.txt
+COPY centroid_rescore_skip_policy_current_safe3.txt /app/service/centroid_rescore_skip_policy_current_safe3.txt
+COPY centroid_rescore_skip_policy_oracle_m2.txt /app/service/centroid_rescore_skip_policy_oracle_m2.txt
+COPY centroid_rescore_skip_policy_oracle_m5.txt /app/service/centroid_rescore_skip_policy_oracle_m5.txt
+COPY centroid_rescore_skip_policy_oracle_features_m3.txt /app/service/centroid_rescore_skip_policy_oracle_features_m3.txt
+COPY centroid_rescore_skip_policy_final_oracle_m3_20260605.txt /app/service/centroid_rescore_skip_policy_final_oracle_m3_20260605.txt
+COPY centroid_rescore_skip_policy_final_test2_m3_20260605.txt /app/service/centroid_rescore_skip_policy_final_test2_m3_20260605.txt
+COPY residual8_prefilter_policy_rate50_sk50.txt /app/service/residual8_prefilter_policy_rate50_sk50.txt
+COPY residual8_prefilter_policy_rate30_sk50.txt /app/service/residual8_prefilter_policy_rate30_sk50.txt
+COPY residual8_prefilter_policy_rate20_sk20.txt /app/service/residual8_prefilter_policy_rate20_sk20.txt
+COPY exact_kd_repair_policy_final_native_20260603.txt /app/service/exact_kd_repair_policy_final_native_20260603.txt
+COPY exact_kd_repair_policy_final_native_20260605_q8r96.txt /app/service/exact_kd_repair_policy_final_native_20260605_q8r96.txt
+COPY exact_kd_repair_policy_gapmax_pad002_20260604.txt /app/service/exact_kd_repair_policy_gapmax_pad002_20260604.txt
+COPY binary_prefilter_policy_rate20_min20.txt /app/service/binary_prefilter_policy_rate20_min20.txt
+COPY binary_prefilter_policy_rate10_min50.txt /app/service/binary_prefilter_policy_rate10_min50.txt
+COPY binary_prefilter_policy_rate5_min100.txt /app/service/binary_prefilter_policy_rate5_min100.txt
 COPY normalization.json /app/service/normalization.json
 COPY mcc_risk.json /app/service/mcc_risk.json
 
